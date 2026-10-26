@@ -1,40 +1,43 @@
-import { MoonIcon, SunIcon } from '@phosphor-icons/react';
 import { useTheme } from 'next-themes';
+import { Moon, Sun } from 'phosphor-react';
 import { useEffect, useState } from 'react';
 
+// Botão de alternar tema, com ícone de sol/lua de verdade (usa `phosphor-react`,
+// que já está instalado — diferente do ThemeToggle antigo, que importava de
+// `@phosphor-icons/react`, pacote que não existe no package.json).
+//
+// O tema inicial é "system" (ver ThemeProvider em _app.page.tsx), então o
+// servidor não tem como saber se o resultado vai ser claro ou escuro — só o
+// navegador sabe, e só depois de montar. Se o ícone certo fosse escolhido já
+// no primeiro render, o HTML do servidor poderia não bater com o do cliente
+// (aviso de "hydration mismatch", ou o ícone trocando sozinho um instante
+// depois de carregar). Por isso: antes de montar, mostra sempre o mesmo
+// ícone (Moon) não importa qual vai ser o tema real; depois de montado,
+// `resolvedTheme` já reflete o tema de verdade e o ícone passa a bater.
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-
-  // O servidor não sabe qual tema o visitante tem salvo (localStorage só
-  // existe no navegador), então no primeiro render do cliente teríamos um
-  // valor de 'theme' diferente do usado no SSR — isso causaria o ícone
-  // "piscar"/trocar ou um aviso de hydration mismatch. Por isso só este
-  // componente (que de fato decide qual ícone mostrar com base no tema)
-  // espera montar no cliente antes de usar o valor real; até lá, mostra o
-  // ícone correspondente ao defaultTheme='dark' do ThemeProvider.
+  const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const isDark = mounted ? theme === 'dark' : true;
+  const isDark = mounted && resolvedTheme === 'dark';
 
   return (
     <button
-      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-      className='
-        flex
-        items-center
-        justify-center
-        rounded-xl
-        border
-        border-border
-        p-2
-        transition
-      '
+      type='button'
+      title='Alternar tema'
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      className='inline-flex items-center justify-center rounded-lg border border-border-strong bg-surface p-2 text-foreground hover:bg-surface-2'
     >
-      {isDark ? <SunIcon size={18} /> : <MoonIcon size={18} />}
+      {/* Ícone mostra o DESTINO do clique, não o tema atual: sol = "vai
+          clarear", lua = "vai escurecer". */}
+      {isDark ? (
+        <Sun size={16} weight='bold' />
+      ) : (
+        <Moon size={16} weight='bold' />
+      )}
     </button>
   );
 }
