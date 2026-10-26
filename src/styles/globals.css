@@ -1,26 +1,178 @@
+@import url("https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@600;700&family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Baloo+2:wght@700;800&display=swap");
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Por padrão o utilitário dark: do Tailwind v4 só liga no
+ * prefers-color-scheme do sistema. Como o next-themes (ver _app.page.tsx)
+ * grava o tema escolhido como data-theme="dark"/"light" no <html>, essa
+ * linha ensina o dark: a seguir esse atributo também — assim um
+ * componente que usa dark:hidden/dark:block (ex.: src/components/Logo)
+ * troca junto quando a pessoa clica no toggle de tema, não só quando o
+ * sistema operacional está em modo escuro.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/*
+ * Paleta ArgilaAuto v2 — ver CLAUDE.md > "Identidade visual" e
+ * design/argila-brand.html (api-argila-auto) para a fonte oficial dos
+ * tokens. Valores crus abaixo (:root e dark) são a "fonte da verdade";
+ * o bloco @theme só os expõe como utilitários Tailwind (bg-clay, text-steel...).
+ */
+:root {
+  --clay: #b0562f;
+  --clay-deep: #8a431f;
+  --clay-soft: #f3ddcc;
+  --steel: #4f6b66;
+  --steel-deep: #38524d;
+  --steel-soft: #dce6e4;
+
+  --paper: #faf7f3;
+  --surface: #ffffff;
+  --surface-2: #f2ece5;
+  --text: #2b2420;
+  --text-muted: #6b5c50;
+  --text-faint: #8a8070;
+  --border: #e4d9ce;
+  --border-strong: #d2c1b0;
+
+  --good: #2e8b57;
+  --good-soft: #dbeee2;
+  --warn: #c98a2e;
+  --warn-soft: #f5e6cc;
+  --info: #3e7cb8;
+  --info-soft: #dceaf6;
+  --active-purple: #7856c8;
+  --active-soft: #e9e1f7;
+  --block: #b0501f;
+  --block-soft: #f5ddc7;
+  --crit: #b23a3a;
+  --crit-soft: #f5dbdb;
+  --neutral-badge: #6b5c50;
+  --neutral-soft: #ece4db;
+
+  --radius: 10px;
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --paper: #17130f;
+    --surface: #201a15;
+    --surface-2: #281f19;
+    --text: #f2e9e0;
+    --text-muted: #b3a296;
+    --text-faint: #6b6058;
+    --border: #362b22;
+    --border-strong: #493a2e;
+    --clay: #d2793f;
+    --clay-deep: #e8955c;
+    --clay-soft: #3a2416;
+    --steel: #8caca6;
+    --steel-deep: #a9c6c0;
+    --steel-soft: #233330;
+    --good: #5fbe8a;
+    --good-soft: #183328;
+    --warn: #e0aa4e;
+    --warn-soft: #382c14;
+    --info: #7aaad6;
+    --info-soft: #182a38;
+    --active-purple: #a691e8;
+    --active-soft: #2a2140;
+    --block: #e0925f;
+    --block-soft: #3a2417;
+    --crit: #e08080;
+    --crit-soft: #3a1e1e;
+    --neutral-badge: #b0a090;
+    --neutral-soft: #241e19;
+    color-scheme: dark;
   }
 }
 
+:root[data-theme="dark"] {
+  --paper: #17130f;
+  --surface: #201a15;
+  --surface-2: #281f19;
+  --text: #f2e9e0;
+  --text-muted: #b3a296;
+  --text-faint: #6b6058;
+  --border: #362b22;
+  --border-strong: #493a2e;
+  --clay: #d2793f;
+  --clay-deep: #e8955c;
+  --clay-soft: #3a2416;
+  --steel: #8caca6;
+  --steel-deep: #a9c6c0;
+  --steel-soft: #233330;
+  --good: #5fbe8a;
+  --good-soft: #183328;
+  --warn: #e0aa4e;
+  --warn-soft: #382c14;
+  --info: #7aaad6;
+  --info-soft: #182a38;
+  --active-purple: #a691e8;
+  --active-soft: #2a2140;
+  --block: #e0925f;
+  --block-soft: #3a2417;
+  --crit: #e08080;
+  --crit-soft: #3a1e1e;
+  --neutral-badge: #b0a090;
+  --neutral-soft: #241e19;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-clay: var(--clay);
+  --color-clay-deep: var(--clay-deep);
+  --color-clay-soft: var(--clay-soft);
+  --color-steel: var(--steel);
+  --color-steel-deep: var(--steel-deep);
+  --color-steel-soft: var(--steel-soft);
+
+  --color-paper: var(--paper);
+  --color-background: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--text);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-active-purple: var(--active-purple);
+  --color-active-soft: var(--active-soft);
+  --color-block: var(--block);
+  --color-block-soft: var(--block-soft);
+  --color-danger: var(--crit);
+  --color-danger-light: var(--crit-soft);
+  --color-crit: var(--crit);
+  --color-crit-soft: var(--crit-soft);
+  --color-neutral-badge: var(--neutral-badge);
+  --color-neutral-soft: var(--neutral-soft);
+
+  --radius-DEFAULT: var(--radius);
+
+  --font-display: "Zilla Slab", ui-serif, Georgia, serif;
+  --font-wordmark: "Baloo 2", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
 }
