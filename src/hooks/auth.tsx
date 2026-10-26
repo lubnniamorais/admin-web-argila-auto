@@ -11,12 +11,20 @@ import {
 
 import { api } from '@/lib/apiClient';
 
+// Espelha o schema `User` do openapi.yaml da API (GET /users/me).
+// Importante: os campos vêm em snake_case de verdade na resposta HTTP
+// (ex.: "workshop_id", "avatar_url"), não é um typo — por isso o tipo
+// também fica em snake_case aqui, pra não precisar converter nada na mão.
 interface IUser {
   id: string;
+  workshop_id: string | null; // só null pra SUPER_ADMIN, que não pertence a nenhuma workshop
   name: string;
   email: string;
-  role: 'ADMIN' | 'MEMBER';
-  enabled: boolean;
+  avatar_url: string | null;
+  active: boolean;
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'RECEPTIONIST' | 'MECHANIC';
+  created_at: string;
+  updated_at: string;
 }
 
 interface IAuthState {
@@ -42,10 +50,10 @@ interface IAuthProviderProps {
 }
 
 export function signOut(): void {
-  destroyCookie(undefined, 'autismo:token', {
+  destroyCookie(undefined, 'argilaauto:token', {
     path: '/',
   });
-  destroyCookie(undefined, 'autismo:refresh_token', {
+  destroyCookie(undefined, 'argilaauto:refresh_token', {
     path: '/',
   });
 
@@ -75,12 +83,12 @@ const AuthProvider = ({ children }: IAuthProviderProps) => {
      * Fazemos isso quando é um cookie que vai ser usado de forma global.
      *
      */
-    setCookie(undefined, 'autismo:token', token, {
+    setCookie(undefined, 'argilaauto:token', token, {
       maxAge: 60 * 60 * 24 * 30, // 30 days
       path: '/',
     });
 
-    setCookie(undefined, 'autismo:refresh_token', refresh_token, {
+    setCookie(undefined, 'argilaauto:refresh_token', refresh_token, {
       maxAge: 60 * 60 * 24 * 30, // 30 days
       path: '/',
     });
@@ -97,7 +105,7 @@ const AuthProvider = ({ children }: IAuthProviderProps) => {
   }, []);
 
   const updateToken = useCallback(async () => {
-    const { 'autismo:refresh_token': refreshToken } = parseCookies();
+    const { 'argilaauto:refresh_token': refreshToken } = parseCookies();
 
     if (refreshToken) {
       const response = await api.post('/sessions/refresh', {
@@ -114,12 +122,12 @@ const AuthProvider = ({ children }: IAuthProviderProps) => {
        * Fazemos isso quando é um cookie que vai ser usado de forma global.
        *
        */
-      setCookie(undefined, 'autismo:token', token, {
+      setCookie(undefined, 'argilaauto:token', token, {
         maxAge: 60 * 60 * 24 * 30, // 30 days
         path: '/',
       });
 
-      setCookie(undefined, 'autismo:refresh_token', refresh_token, {
+      setCookie(undefined, 'argilaauto:refresh_token', refresh_token, {
         maxAge: 60 * 60 * 24 * 30, // 30 days
         path: '/',
       });
@@ -130,7 +138,7 @@ const AuthProvider = ({ children }: IAuthProviderProps) => {
   // END FUNCTIONS
 
   useEffect(() => {
-    const { 'autismo:token': token } = parseCookies();
+    const { 'argilaauto:token': token } = parseCookies();
 
     if (token) {
       setIsLoadingAuthenticated(true);

@@ -7,14 +7,14 @@ import { parseCookies } from 'nookies';
 
 // NOTE - FUNÇÃO PARA USUÁRIO NÃO AUTENTICADOS
 function withSSRGuest<P extends { [key: string]: any }>(
-  fn: GetServerSideProps<P>,
+  fn: GetServerSideProps<P>
 ) {
   return async (
-    context: GetServerSidePropsContext,
+    context: GetServerSidePropsContext
   ): Promise<GetServerSidePropsResult<P>> => {
     const cookies = parseCookies(context);
 
-    const token = cookies['autismo:token'];
+    const token = cookies['argilaauto:token'];
 
     if (token) {
       return {

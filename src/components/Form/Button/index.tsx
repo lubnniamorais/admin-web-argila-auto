@@ -1,58 +1,33 @@
-import Link from 'next/link';
+import { ButtonHTMLAttributes } from 'react';
 
-interface Props {
-  href: string;
-  children: React.ReactNode;
-  variant?: 'primary' | 'secondary' | 'light';
+type ButtonVariant = 'primary' | 'ghost';
+
+const baseClassName =
+  'inline-flex w-full items-center justify-center rounded-[9px] px-3 py-3 text-[14.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-70';
+
+const variantClassName: Record<ButtonVariant, string> = {
+  primary: 'bg-clay text-white hover:bg-clay-deep',
+  ghost:
+    'border border-border-strong bg-surface text-foreground hover:bg-surface-2',
+};
+
+export function buttonClassName(
+  variant: ButtonVariant = 'primary',
+  className?: string
+) {
+  return [baseClassName, variantClassName[variant], className]
+    .filter(Boolean)
+    .join(' ');
 }
 
-export function Button({ href, children, variant = 'primary' }: Props) {
-  return (
-    <Link
-      href={href}
-      className={`
-        inline-flex
-        items-center
-        justify-center
-        rounded-2xl
-        px-6
-        py-4
-        font-medium
-        transition-all
-        duration-300
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+}
 
-        ${
-          variant === 'primary'
-            ? `
-              bg-primary
-              text-primary-foreground
-              hover:-translate-y-1
-              hover:shadow-lg
-            `
-            : `
-              border
-              border-border
-              hover:border-primary
-              hover:text-primary
-              hover:-translate-y-1
-            `
-        }
-
-        ${
-          variant === 'light'
-            ? `
-                bg-white
-                text-primary
-
-                hover:bg-neutral-100
-                hover:-translate-y-1
-                hover:shadow-lg
-              `
-            : ''
-        }
-      `}
-    >
-      {children}
-    </Link>
-  );
+export function Button({
+  variant = 'primary',
+  className,
+  ...rest
+}: ButtonProps) {
+  return <button className={buttonClassName(variant, className)} {...rest} />;
 }

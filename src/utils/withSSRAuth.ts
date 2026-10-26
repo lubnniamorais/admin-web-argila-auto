@@ -14,14 +14,14 @@ type IWithSSRAuthOptions = {
 
 function withSSRAuth<P extends { [key: string]: any }>(
   fn: GetServerSideProps<P>,
-  options?: IWithSSRAuthOptions,
+  options?: IWithSSRAuthOptions
 ) {
   return async (
-    context: GetServerSidePropsContext,
+    context: GetServerSidePropsContext
   ): Promise<GetServerSidePropsResult<P>> => {
     const cookies = parseCookies(context);
 
-    const token = cookies['autismo:token'];
+    const token = cookies['argilaauto:token'];
 
     if (!token) {
       return {
@@ -57,8 +57,8 @@ function withSSRAuth<P extends { [key: string]: any }>(
       return await fn(context);
     } catch (err) {
       if (err instanceof AuthTokenError) {
-        destroyCookie(context, 'autismo:token', { path: '/' });
-        destroyCookie(context, 'autismo:refresh_token', { path: '/' });
+        destroyCookie(context, 'argilaauto:token', { path: '/' });
+        destroyCookie(context, 'argilaauto:refresh_token', { path: '/' });
 
         return {
           redirect: {

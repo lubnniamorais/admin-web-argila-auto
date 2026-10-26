@@ -1,32 +1,33 @@
 import Link, { LinkProps } from 'next/link';
-import { tv, VariantProps } from 'tailwind-variants';
+import { AnchorHTMLAttributes } from 'react';
 
-const link = tv({
-  base: [
-    'flex justify-end no-underline text-WHITE font-bold my-4 mx-6',
-    'duration-200 hover:text-OFF_WHITE_500 before:opacity-10',
-  ],
+// Link estilizado "Esqueceu a senha?", usado na tela de login.
+//
+// A versão antiga usava `tailwind-variants` (lib não instalada neste
+// projeto) e cores do template reaproveitado (OFF_WHITE_500/700, WHITE)
+// que não existem nos tokens do ArgilaAuto — herdadas de quando o fundo
+// do card de login era escuro (texto branco fazia sentido ali). Reescrito
+// sem a lib, usando `clay-deep`, o mesmo tom que já estava sendo usado
+// como link direto na tela de login antes deste componente existir.
+//
+// A variante "active" do componente original nunca era usada de verdade
+// (toda chamada passava active={false}) — removida pra não carregar
+// estado morto; se um dia precisar de um estado "ativo" aqui, é só
+// reintroduzir quando houver um uso real pra ele.
+type ForgotPasswordProps = LinkProps &
+  Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkProps>;
 
-  variants: {
-    active: {
-      true: 'font-bold text-OFF_WHITE_700 before:opacity-10',
-    },
-  },
-});
-
-type LinkVariants = LinkProps<HTMLLinkElement> & VariantProps<typeof link>;
-
-interface ILinkBaseProps extends LinkVariants {
-  href: string;
-  children: React.ReactNode;
-}
-
-const ForgotPassword = ({ href, children, ...rest }: ILinkBaseProps) => {
+export function ForgotPassword({
+  className,
+  children,
+  ...rest
+}: ForgotPasswordProps) {
   return (
-    <Link className={link({ active: false })} href={href} {...rest}>
+    <Link
+      className={`text-[12.5px] font-semibold text-clay-deep transition-colors hover:text-clay ${className ?? ''}`}
+      {...rest}
+    >
       {children}
     </Link>
   );
-};
-
-export { ForgotPassword };
+}

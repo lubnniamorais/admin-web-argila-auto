@@ -21,7 +21,7 @@ export function setupAPIClient(context?: GetServerSidePropsContext) {
   const api = axios.create({
     baseURL: process.env.NEXT_PUBLIC_API_URL,
     headers: {
-      Authorization: `Bearer ${cookies['autismo:token']}`,
+      Authorization: `Bearer ${cookies['argilaauto:token']}`,
     },
   });
 
@@ -34,7 +34,7 @@ export function setupAPIClient(context?: GetServerSidePropsContext) {
         if (error.response.status === 401) {
           cookies = parseCookies(context);
 
-          const refreshToken = cookies['autismo:refresh_token'];
+          const refreshToken = cookies['argilaauto:refresh_token'];
 
           console.log('Erro axios primeiro if', error.response.data);
 
@@ -67,13 +67,13 @@ export function setupAPIClient(context?: GetServerSidePropsContext) {
 
                 console.log('Dentro da api', response.data);
 
-                setCookie(context, 'autismo:token', token, {
+                setCookie(context, 'argilaauto:token', token, {
                   maxAge: 60 * 60 * 24 * 30, // 30 dias
                   path: '/',
                 });
 
                 // NOTE - maxAge: quanto tempo queremos armazenar, manter salvo no navegador
-                setCookie(context, 'autismo:refresh_token', refresh_token, {
+                setCookie(context, 'argilaauto:refresh_token', refresh_token, {
                   maxAge: 60 * 60 * 24 * 30, // 30 dias
                   path: '/',
                 });
@@ -81,7 +81,7 @@ export function setupAPIClient(context?: GetServerSidePropsContext) {
                 api.defaults.headers.Authorization = `Bearer ${token}`;
 
                 failedRequestQueue.forEach((request) =>
-                  request.onSuccess(token),
+                  request.onSuccess(token)
                 );
                 failedRequestQueue = [];
               })
@@ -130,7 +130,7 @@ export function setupAPIClient(context?: GetServerSidePropsContext) {
       }
 
       return Promise.reject(error);
-    },
+    }
   );
 
   return api;
