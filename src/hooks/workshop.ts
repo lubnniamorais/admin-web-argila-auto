@@ -17,12 +17,26 @@ export interface IWorkshopSubscription {
   blocked: boolean;
 }
 
+// Sempre presente no objeto (nunca null), mesmo quando a oficina não
+// preencheu nenhum campo de endereço ainda — cada campo individual que
+// vem null nesse caso (ver WorkshopPresenter.toHttp na API).
+export interface IWorkshopAddress {
+  street: string | null;
+  number: string | null;
+  complement: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+}
+
 export interface IWorkshop {
   id: string;
   name: string;
   cnpj: string | null;
   phone: string | null;
   email: string | null;
+  address: IWorkshopAddress;
   logo_url: string | null;
   active: boolean;
   created_at: string;

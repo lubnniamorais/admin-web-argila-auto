@@ -1,6 +1,6 @@
 # ArgilaAuto — Admin (admin-argila-auto)
 
-> Atualizado em 2026-10-27. Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
+> Atualizado em 2026-10-27 (final da sessão que terminou `/configuracoes`: migração pra `@formkit/tempo` feita, logo no `.env`, tela testada no navegador e commitada). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
 
 ## Como trabalhar neste projeto (combinado com o usuário)
 
@@ -8,6 +8,13 @@
 - **Detalhar o que está sendo feito, e comentar o código** (não só entregar o resultado pronto).
 - O protótipo visual compartilhado é **referência de estrutura de tela**, não a fonte de verdade de dados/regras — a **API é quem manda** em rotas, contratos, regras de permissão e no que de fato existe hoje.
 - **TanStack Query — padrão pra código novo**: `queryFn`/`mutationFn` como arrow function **inline**, direto dentro do `useQuery`/`useMutation` (ver `src/hooks/workshop.ts`) — não como função nomeada separada. Vale a partir de `workshop.ts`; `src/hooks/auth.tsx` (login/refresh via Axios direto, fora do React Query) fica como está por decisão do usuário, não é pra refatorar sem pedir.
+- **Toda operação que escreve no banco (criar/atualizar/deletar via API) usa `useMutation` + `SubmitHandler` do RHF** — nunca um `async function` solto chamando a API direto. O `SubmitHandler` fica fino (só chama `mutateAsync` + trata erro no `catch`); o que fazer no sucesso (navegar, trocar de tela, disparar outra mutation) vai no `onSuccess` da própria mutation — **exceto** quando o sucesso só muda o que é renderizado (sem nenhuma ação de verdade), caso em que se lê `isSuccess`/`error` direto do retorno do `useMutation` em vez de duplicar isso num `useState` (ver `/forgot-password`, `/reset-password`: `isSuccess` renomeado pra `isEmailSent`/`isResetDone` na desestruturação, nenhum `useState` redundante). O loading do botão de submit usa o `isPending` da mutation, não o `isSubmitting` do `formState` (mesmo padrão do `atletas/criar` do AMIP — ver abaixo).
+- **Sempre desestruture o objeto** — no `mutationFn` e em qualquer lugar que consome um objeto de dados (ex.: `async ({ name, email }: IFormData) => {...}`, nunca `data.name`/`data.email` repetido).
+- **Endereço: busca por CEP via ViaCEP** (`https://viacep.com.br/ws/{cep}/json/`, `axios.get` direto, não pelo client `api` configurado — é host externo, sem auth) — botão de busca ao lado do campo CEP, preenche rua/bairro/cidade/UF como campos `disabled`. Ver `src/pages/signup/index.page.tsx` e `src/pages/configuracoes/index.page.tsx`.
+- **Ícones sempre da lib `phosphor-react`** (já é dependência, usada no `Menubar`) — nunca unicode/emoji cru, nem como texto solto nem dentro de botão.
+- **Datas: usar `@formkit/tempo`** (pedido explícito do usuário, 27/10/2026) — **migrado** em `src/report/header.ts` e `src/pages/configuracoes/index.page.tsx`, instalado (`^1.1.0`). Uso: `format(date, 'DD/MM/YYYY', 'pt-BR')`. Escape de texto literal confirmado: **não** usa colchetes `[literal]` (sintaxe moment/dayjs) — usa **barra invertida antes de cada caractere-token** (ver `node_modules/@formkit/tempo/dist/common.mjs`, função `escapeTokens`, e `parts.mjs`). Tokens reservados de 1 char incluem `Y M D d m s H h a A Z S` — qualquer um desses dentro de texto literal precisa de `\` antes. Exemplo real (`headerReport`, "27/10/2026 às 20:45h"): `format(date, 'DD/MM/YYYY à\\s HH:mm\\h', 'pt-BR')` — "à" não precisa de escape (não é token), mas o "s" de "às" e o "h" final precisam.
+- **Lição da sessão 27/10**: nunca tentar reproduzir manualmente, em uma chamada de ferramenta, uma string base64 colada pelo usuário com mais de uns poucos milhares de caracteres — risco real de truncar/corromper (aconteceu duas vezes antes de desistir). Pedir pra salvar o arquivo em disco e passar o caminho; converter pra base64 via shell/script, nunca retypar.
+- **Referência de convenções**: `/home/lubnnia/Documentos/Projetos/Amip/admin-web-amip/` (projeto irmão, fora do ArgilaAuto) — mesmo stack (RHF+Zod+TanStack Query+Axios+Phosphor), usado como modelo pros pontos acima. Tela de referência: `src/pages/atletas/criar/index.page.tsx`. Módulo de relatório em PDF (`src/report/`) replicado de lá pro ArgilaAuto, adaptado pros tokens de cor daqui — ver `src/report/` neste projeto.
 
 ## O que é o projeto
 
@@ -71,10 +78,16 @@ Mais dois estados fora da sequência:
 ## Estado atual — o que já está construído e testado
 
 - **Identidade visual**: tokens de cor (claro/escuro), fontes e `@theme` configurados em `globals.css`; favicon de verdade (`public/favicon.ico`, `.svg`, `favicon-96x96.png`, `apple-touch-icon.png`, gerados a partir do selo v2).
-- **Autenticação**: `/` (Welcome) e `/login` (`src/pages/login/index.page.tsx`) funcionando de ponta a ponta contra `POST /sessions` de verdade, com validação (Zod + React Hook Form), cookies `argilaauto:token`/`argilaauto:refresh_token` (renomeados do resíduo antigo `autismo:*`).
-- **Casco do app autenticado**: `AppShell` (sidebar + topbar) + `Menubar` (navegação com ícones Phosphor, colapsa pra só-ícones abaixo de 880px, mesmo critério do protótipo) + `ThemeToggle` (ícone sol/lua de verdade, via `next-themes`).
-- **`/dashboard`** (`src/pages/dashboard/index.page.tsx`): só **placeholder** — prova que login → AppShell → dados reais de usuário/oficina funciona, mas sem KPIs/gráfico/tabela ainda (bloqueado por mudanças em andamento na API — ver "Escopo" abaixo).
-- `IUser` (em `auth.tsx`) e `IWorkshop`/`useWorkshop` (em `hooks/workshop.ts`) já espelham o schema real da API (snake_case, roles corretos).
+- **Autenticação**: `/` (Welcome), `/login`, **`/signup`** (3 passos: dados da oficina+endereço → plano → sucesso/checkout) e **`/forgot-password`**+**`/reset-password`** — todas testadas de ponta a ponta contra a API real (não só unit, teste manual no navegador). Cookies `argilaauto:token`/`argilaauto:refresh_token`. `signUp` novo em `auth.tsx` (ver `AuthProvider`) — mesma lógica de `signIn` (salva token, não redireciona sozinho: quem decide pra onde ir depois é a página, já que depende do plano escolhido).
+- **Casco do app autenticado**: `AppShell` (sidebar + topbar) + `Menubar` (navegação com ícones Phosphor, colapsa pra só-ícones abaixo de 880px) + `ThemeToggle`. Tamanhos de fonte/logo da sidebar aumentados em 27/10 além do que o protótipo original pedia (decisão do usuário, protótipo ficava pequeno demais em telas grandes) — ver comentários em `AppShell`/`Menubar`.
+- **`/dashboard`** (`src/pages/dashboard/index.page.tsx`): só **placeholder** — bloqueado por mudanças na API, ver "Escopo" abaixo (atualizado: as 2 mudanças "em andamento" de ontem parecem ter saído — `GET /vehicles/preventive-maintenance-insight` (agregado) e endereço da Workshop já existem; falta confirmar se o nome do cliente/veículo embutido em `ServiceOrder` e o faturamento mensal histórico também já foram, antes de desbloquear o Dashboard).
+- **`/configuracoes`** — **concluída, testada no navegador e commitada** nesta sessão (27/10). 3 seções empilhadas numa página só (decisão confirmada: sem abas):
+  1. **Dados da oficina** — form com `PUT /workshops` (nome, telefone, e-mail, endereço via ViaCEP, `logoUrl` como campo de URL de texto — não existe upload de arquivo na API). CNPJ mostrado `disabled` (API não permite editar) — testado, confirma `disabled` com "Não informado" quando vazio.
+  2. **Plano e assinatura** — lê `workshop.subscription` (`GET /workshops/me`), botões condicionais: `upgrade-to-pro`/`subscribe-to-basic` (ambos redirecionam pro checkout da AbacatePay) e `cancel-subscription` (só se Pro sem cancelamento pendente). Testado o estado Básico em trial ("Teste grátis até DD/MM/AAAA" com data correta via tempo).
+  3. **Relatório financeiro em PDF** — `GET /service-order-payments/report?from=&to=` + `src/report/` (módulo replicado do AMIP — ver `docDefinitions.ts`/`header.ts`/`footer.ts`/`stylesTable.ts`/`table.ts`) + `pdfmake` `^0.2.23` + `@types/pdfmake`. Tabela: código da OS, cliente, método, valor, situação (usa `order_code`/`customer_name` que a API devolve). Testado: chamada à API (200), estado "nenhum pagamento no período" (toast, sem crash), e `headerReport()` isolado com a logo real do `.env` e data formatada — **não testado com linhas de pagamento de verdade** (exigiria montar cliente+veículo+serviço+OS via API só pra isso; `table.ts`/`docDefinitions.ts` não foram alterados nesta sessão, só `header.ts`).
+  - **Logo do relatório**: `NEXT_PUBLIC_REPORT_IMAGE_BASE64` no `.env` **preenchida** (27/10) a partir de `src/assets/argilaauto-logo-light.png`, convertida via script Python (nunca colar base64 gigante direto no chat — ver "Como trabalhar" acima).
+  - **Ambiente local pra testar isso de novo**: Postgres já roda via docker-compose da API (`api-argila-auto/docker-compose.yml`, porta 5432, já migrado — `npx prisma migrate deploy`); API sobe com `npm run dev` em `api-argila-auto/` (porta 3333, hardcoded em `src/infra/http/server.ts`); `.env` do admin aponta `NEXT_PUBLIC_API_URL` pro IP da própria máquina (`192.168.100.117:3333`), não `localhost` — confirmar que esse IP ainda é o certo se mudar de rede. Não há usuário de teste com senha conhecida no banco (os existentes — `lubnnia@gmail.com`, contas `E2E Basic`/`E2E Pro` — têm senha com hash, sem como reaproveitar); criar oficina nova via `/signup` quando precisar testar de novo.
+- `IUser` (em `auth.tsx`) e `IWorkshop`/`useWorkshop` (em `hooks/workshop.ts`, agora com `address`) já espelham o schema real da API (snake_case, roles corretos).
 
 ### Pegadinhas já descobertas nesta base (relevantes pra qualquer trabalho futuro com Tailwind v4 + Next 16)
 1. **Classe Tailwind montada via template string dinâmica nunca é detectada** — o Tailwind lê o texto literal dos arquivos, não executa o JS. Nunca fazer `` `${variavel}:hidden` ``; escrever a classe por extenso em cada lugar que ela aparece.
@@ -83,6 +96,7 @@ Mais dois estados fora da sequência:
 4. **`@import` de fonte externa precisa vir ANTES de `@import "tailwindcss"`** no `globals.css` — depois que o Tailwind expande, qualquer `@import` que sobrar depois quebra (regra do próprio CSS: `@import` tem que vir antes de qualquer outra regra).
 5. **`items-center` num flex `min-h-screen overflow-hidden` esconde o topo do conteúdo quando ele é mais alto que a tela** — a centralização empurra o início do elemento pra uma coordenada Y negativa, que a rolagem normal nunca alcança (confirmado: `scrollY: 0` e o `<h1>` ainda em `top: -20px`). Descoberto no `AuthShell` (`src/components/AuthShell/index.tsx`), quando o Passo 2 do Signup cortava o título. Corrigido trocando pra `items-start` + padding vertical (`py-12`) — garante que o conteúdo sempre começa visível, independente da altura. Vale pra qualquer container que centraliza verticalmente um filho de altura variável/desconhecida.
 6. **Arquivo editado pela ferramenta pode ser sobrescrito pelo autosave do editor do usuário, se ele estiver com o arquivo aberto** — sintoma: a edição é aplicada (confirmada pela própria ferramenta), mas uma leitura logo depois mostra o conteúdo antigo de volta. Se isso acontecer, confirme o conteúdo direto via shell (`grep`/`cat`, fora das ferramentas de edição) antes de insistir, e peça pra fechar/recarregar o arquivo no editor antes de tentar de novo — reaplicar a edição sem isso só vai ser sobrescrito de novo.
+7. **Zod `.refine(...).optional()` roda o `refine` mesmo em string vazia** — `.optional()` só livra de `undefined`, e o RHF geralmente usa `''` como default de campo de texto, não `undefined`. Bug real encontrado e corrigido em 27/10: `workshopCnpj` no Signup travava QUALQUER cadastro sem CNPJ (campo opcional) com "CNPJ inválido", porque `validateCNPJ('')` dá `false`. Correção: validar dentro do próprio `refine` (`(value) => !value || validateCNPJ(value)`), não depender da ordem com `.optional()`. Vale pra qualquer campo opcional com `.refine()` custom.
 
 ## Escopo: protótipo vs. capacidade real da API
 
@@ -93,13 +107,9 @@ A API já suporta bem mais do que o protótipo visual mostra. **Decisão do usu�
 - Fotos de checklist (entrada/saída do veículo, por categoria).
 - Emissão de nota fiscal (NFS-e) por OS (hoje só esqueleto na API, sem provedor configurado — cai em erro).
 - Link público de acompanhamento da OS pro cliente final (sem login).
-- Relatório financeiro de pagamentos (ver abaixo).
+- ~~Relatório financeiro de pagamentos~~ ✅ implementado em `/configuracoes` (ver "Estado atual" acima) — API enriquecida em 27/10/2026 com `order_code`/`customer_name` por pagamento (ver "Referência rápida da API" abaixo).
 
-**Em andamento (usuário mexendo na API agora, 2026-10-26):** adicionar nome do cliente e dados do veículo embutidos direto na resposta de `ServiceOrder` (hoje só vêm `customer_id`/`vehicle_id` crus), e um endpoint de faturamento mensal histórico (hoje só existe `GET /service-order-payments/report?from=&to=`, que devolve um período por vez — pra reconstruir um gráfico de 6 meses seriam 6 chamadas). O conteúdo real do Dashboard (KPIs, gráfico, tabela de OS recentes) está **pausado esperando isso** — não implementar a partir do que está documentado aqui sem confirmar que essas mudanças já foram pro ar.
-
-## Relatório financeiro (Configurações) — pendente de especificação
-
-Decisão confirmada: vai existir, usando a lib **pdfmake** (ainda não está no `package.json`, adicionar quando for implementar). Endpoint: `GET /service-order-payments/report?from=&to=` (total recebido, totais por método de pagamento, filtra por data de pagamento, exclui `CANCELED` do total mas lista). **Aguardando o usuário detalhar como o relatório deve ficar** antes de implementar — não inventar layout/conteúdo disso sozinho.
+**Em andamento (usuário mexendo na API em paralelo)**: na sessão de 26/10 ficou registrado que faltavam nome do cliente/veículo embutidos em `ServiceOrder` e um endpoint de faturamento mensal histórico. Em 27/10 apareceram no `openapi.yaml` da API: `GET /vehicles/preventive-maintenance-insight` (agregado por workshop) e endereço da `Workshop` — **não confirmado ainda** se os outros dois itens (cliente/veículo embutido em `ServiceOrder`, faturamento mensal) também já foram, nem se `GET /service-order-payments/monthly-report` (apareceu no `openapi.yaml`) é exatamente esse endpoint. **Checar isso primeiro na próxima sessão antes de desbloquear o Dashboard.**
 
 Não existe endpoint de relatório de estoque — se for necessário, seria calculado no front a partir de `GET /parts` (comparando `quantity` com `minimumStock`).
 
@@ -113,7 +123,7 @@ Não existe endpoint de relatório de estoque — se for necessário, seria calc
 - Nomenclatura no código/contrato da API é **toda em inglês** (`Workshop`, `Customer`, `Vehicle`, `Service`, `Part`, `ServiceOrder`, etc.) — ver tabela de mapeamento português→inglês no `CLAUDE.md` da API se precisar.
 
 ### Endpoints por módulo (path — método — resumo)
-- **Workshops**: `POST /workshops/signup` (público, cria tenant+User ADMIN+Subscription BASIC) · `GET /workshops/me` · `GET/PUT /workshops` (update: nome/telefone/e-mail/logo, CNPJ não editável) · `GET /workshops` e `DELETE /workshops/:id` (só `SUPER_ADMIN`) · `POST /workshops/upgrade-to-pro` · `POST /workshops/subscribe-to-basic` · `POST /workshops/cancel-subscription` · `GET/PUT /workshops/:id/fiscal-settings`.
+- **Workshops**: `POST /workshops/signup` (público, cria tenant+User ADMIN+Subscription BASIC) · `GET /workshops/me` · `GET/PUT /workshops` (update: nome/telefone/e-mail/**endereço completo (rua/número/complemento/bairro/cidade/UF/CEP, todos opcionais, adicionado 27/10)**/logo, CNPJ não editável) · `GET /workshops` e `DELETE /workshops/:id` (só `SUPER_ADMIN`) · `POST /workshops/upgrade-to-pro` · `POST /workshops/subscribe-to-basic` · `POST /workshops/cancel-subscription` · `GET/PUT /workshops/:id/fiscal-settings`. Resposta de `Workshop` agora sempre tem `address: {street,number,complement,neighborhood,city,state,zip_code}` (objeto aninhado, igual ao de `WorkshopFiscalSettings`).
 - **Users** (equipe): `POST /users` · `GET /users` (paginado) · `PUT /users` · `GET /users/show/:id` · `GET /users/me` · `PATCH /users/password` · `DELETE /users/:id`.
 - **Customers**: `POST /customers` · `GET /customers` · `PUT /customers` · `GET /customers/:id`. `ADMIN`/`RECEPTIONIST` criam/editam; `MECHANIC` só lista.
 - **Vehicles**: `POST /vehicles` · `GET /vehicles` (filtro `?customerId=`) · `PUT /vehicles` (placa não editável) · `GET /vehicles/:id` · `GET /vehicles/:id/preventive-maintenance-insight` (**plano Pro só, 403 no Básico**).
@@ -122,7 +132,7 @@ Não existe endpoint de relatório de estoque — se for necessário, seria calc
 - **ServiceOrders** (núcleo): `POST/GET/PUT /service-orders`, `GET /service-orders/:id`, `GET /service-orders/:id/report-data` (consolidado pra impressão), `PATCH /service-orders/:id/status` (máquina de estados), `PATCH /service-orders/:id/urgency-feedback` (só `MECHANIC`), `PATCH /service-orders/:id/service-summary`, `GET /service-orders/:id/invoice` + `POST .../invoice/retry`, `POST /service-orders/:id/items` + `DELETE .../items/:itemId`, `POST/GET /service-orders/:id/payments` + `POST .../payments/:id/confirm` + `POST .../payments/:id/cancel`, `POST/GET/DELETE /service-orders/:id/checklist-photos`, `POST /service-orders/:id/public-link/regenerate`.
   - `GET /service-orders` aceita filtros `?customerId=&vehicleId=&status=&searchParam=&aiUrgencySuggestion=&sortBy=urgency`.
   - `MECHANIC` participa de add/remove item, update geral e avançar status (mas **não** cancela — só `ADMIN`/`RECEPTIONIST`).
-- **Relatórios**: `GET /service-order-payments/report?from=&to=`.
+- **Relatórios**: `GET /service-order-payments/report?from=&to=` (cada pagamento vem com `order_code`/`customer_name` desde 27/10, além dos campos normais de `ServiceOrderPayment` — ver `ServiceOrderPaymentsReportItem` no `openapi.yaml` da API) · `GET /service-order-payments/monthly-report` (apareceu no `openapi.yaml`, agregado por mês — **não confirmado ainda** se é o endpoint de faturamento histórico que o Dashboard estava esperando, checar antes de usar).
 - **Canal público (sem auth)**: `GET /track/:token`, `POST /track/:token/approve`, `POST /track/:token/reject`.
 - Módulos de `CustomerAccount` (login do cliente final) existem na API mas são do **app do cliente**, fora do escopo deste admin.
 
@@ -149,7 +159,8 @@ Não existe endpoint de relatório de estoque — se for necessário, seria calc
 - **React Hook Form + Zod + @hookform/resolvers** para formulários/validação.
 - **Axios + nookies** para cliente HTTP e cookies (JWT em cookies, com refresh token).
 - **Radix UI**, `react-imask`, `next-themes`, `react-toastify`, `next-seo`.
-- **pdfmake** — a adicionar quando implementarmos o relatório financeiro.
+- **pdfmake** `^0.2.23` + `@types/pdfmake` — instalado em 27/10/2026 pro relatório financeiro (`src/report/`, módulo replicado do admin-web-amip).
+- **`@formkit/tempo`** `^1.1.0` — instalado e migrado em 27/10/2026 (`src/report/header.ts`, `src/pages/configuracoes/index.page.tsx`) — ver seção "Como trabalhar" no topo deste arquivo pra sintaxe de escape de literais.
 - Alias de import: `@/*` → `./src/*` ([tsconfig.json](tsconfig.json)).
 
 ### Nota sobre o Next.js 16
@@ -164,21 +175,28 @@ src/
 │   ├── _document.page.tsx     # favicon, preconnect de fontes, suppressHydrationWarning (next-themes)
 │   ├── index.page.tsx         # Welcome ("/")
 │   ├── login/index.page.tsx   # Login ("/login")
-│   └── dashboard/index.page.tsx  # Dashboard — PLACEHOLDER, ver "Estado atual"
+│   ├── signup/index.page.tsx            # Signup, 3 passos (ver "Estado atual")
+│   ├── forgot-password/index.page.tsx   # Esqueci minha senha
+│   ├── reset-password/index.page.tsx    # Redefinir senha (lê ?token= da URL)
+│   ├── dashboard/index.page.tsx  # Dashboard — PLACEHOLDER, ver "Estado atual"
+│   └── configuracoes/index.page.tsx     # Dados da oficina + plano + relatório — ver "Estado atual" (testada e commitada)
 ├── components/
 │   ├── AppShell/       # sidebar + topbar das telas autenticadas
-│   ├── AuthShell/      # moldura das telas de auth (Welcome/Login/Signup)
+│   ├── AuthShell/      # moldura das telas de auth (Welcome/Login/Signup/forgot-reset-password)
 │   ├── Logo/           # logomarca oficial (src/assets/), variantes auto/light/dark/iconOnly
 │   ├── Menubar/        # navegação da sidebar (ícones Phosphor, colapsa <880px)
 │   ├── ThemeToggle/    # toggle de tema (ícone sol/lua)
+│   ├── PlanCard/       # card de plano selecionável (RadioGroup do Radix), usado no Signup
 │   ├── Form/
-│   │   ├── Button/, Input/, InputFormControl/, ForgotPassword/   # reconstruídos, OK
-│   │   └── AlertDialog/, InputMask/, InputMaskFormControl/, SelectPicker/, Switch/  # QUEBRADOS, ver abaixo
+│   │   ├── Button/, Input/, InputFormControl/, ForgotPassword/, InputMask/, InputMaskFormControl/   # reconstruídos, OK (InputMask* reconstruído em 27/10 — era QUEBRADO, ver histórico se precisar)
+│   │   └── AlertDialog/, SelectPicker/, Switch/  # ainda QUEBRADOS, ver abaixo
 │   ├── Container/, ErrorAlert/, SuccessAlert/   # reaproveitáveis, token de cor a conferir ao usar
 │   └── BulletEnabled/, Editor/, Pagination/     # QUEBRADOS, ver abaixo
 ├── hooks/
-│   ├── auth.tsx        # AuthContext (signIn, signOut, updateToken, usuário logado) — Axios direto
-│   └── workshop.ts      # useWorkshop (TanStack Query, queryFn inline — padrão pra código novo)
+│   ├── auth.tsx        # AuthContext (signIn, signUp, signOut, updateToken, usuário logado) — Axios direto
+│   └── workshop.ts      # useWorkshop (TanStack Query, queryFn inline), IWorkshop agora com `address`
+├── report/              # módulo de relatório em PDF (pdfmake), replicado do admin-web-amip
+│   ├── docDefinitions.ts, header.ts, footer.ts, stylesTable.ts, table.ts
 ├── lib/
 │   ├── api.ts           # setupAPIClient(context?) — axios com interceptor de refresh token (401)
 │   ├── apiClient.ts      # instancia o client (uso client-side) — export { api }
@@ -192,13 +210,15 @@ src/
 
 ## Pendências / próximos passos
 
+**`/configuracoes` concluída nesta sessão** (27/10) — ver "Estado atual" acima. Único detalhe não coberto: gerar o PDF do relatório com linhas de pagamento reais (só o caso vazio foi testado na UI; `header.ts` foi validado isoladamente com a logo/data reais). Se for mexer em `table.ts`/`docDefinitions.ts` futuramente, vale montar uma OS com pagamento de verdade (cliente+veículo+serviço+OS via API) pra testar o PDF completo no navegador.
+
 **Bloqueado pelo usuário** (mudanças na API em andamento — ver "Em andamento" acima):
-- Conteúdo real do Dashboard (KPIs, gráfico de faturamento, tabela de OS recentes).
+- Conteúdo real do Dashboard (KPIs, gráfico de faturamento, tabela de OS recentes) — checar primeiro se as mudanças que faltavam (cliente/veículo embutido em `ServiceOrder`, faturamento mensal histórico) já saíram, antes de desbloquear.
 
 **Telas ainda não construídas** (rotas citadas no app, mas sem página — dão 404 hoje):
-- Signup (3 passos), `/forgot-password`, `/orcamentos`, `/ordens-de-servico` (Kanban, 9 colunas incl. `REJECTED`), `/clientes-veiculos`, `/produtos`, `/configuracoes` (vai incluir gestão de assinatura/upgrade e o relatório financeiro em PDF via `pdfmake`, layout pendente de especificação do usuário).
+- `/orcamentos`, `/ordens-de-servico` (Kanban, 9 colunas incl. `REJECTED`), `/clientes-veiculos`, `/produtos`. (Signup, forgot/reset-password e Configurações já saíram desta lista — ver "Estado atual".)
 
-**Componentes legados ainda quebrados** (do template reaproveitado — cor antiga SCREAMING_CASE inexistente nos tokens atuais, `tailwind-variants` não instalado, e/ou lib faltando): `BulletEnabled`, `Editor` (também falta `@mdxeditor/editor` inteiro), `Pagination`, `Form/AlertDialog` (falta `@radix-ui/react-alert-dialog`), `Form/InputMask` + `Form/InputMaskFormControl`, `Form/SelectPicker`, `Form/Switch` (falta `@radix-ui/react-switch`). **Decisão do usuário**: conserta cada um só quando a tela que precisa dele for construída, não todos de uma vez. `ContactForm` e o `Layout` antigo (shell genérico, substituído por `AppShell`/`AuthShell`) já foram **apagados** por não terem uso no produto.
+**Componentes legados ainda quebrados** (do template reaproveitado — cor antiga SCREAMING_CASE inexistente nos tokens atuais, `tailwind-variants` não instalado, e/ou lib faltando): `BulletEnabled`, `Editor` (também falta `@mdxeditor/editor` inteiro), `Pagination`, `Form/AlertDialog` (falta `@radix-ui/react-alert-dialog`), `Form/SelectPicker`, `Form/Switch` (falta `@radix-ui/react-switch`). `Form/InputMask`/`Form/InputMaskFormControl` **já foram reconstruídos** (27/10, usando `react-imask` de verdade — ver "Como trabalhar" acima). **Decisão do usuário**: conserta cada um só quando a tela que precisa dele for construída, não todos de uma vez. `ContactForm` e o `Layout` antigo (shell genérico, substituído por `AppShell`/`AuthShell`) já foram **apagados** por não terem uso no produto.
 
 **Pendências técnicas menores**:
 - `Container`/`ErrorAlert`/`SuccessAlert` usam uma paleta semântica (`primary`, `success`) parcialmente diferente da nossa (`clay`, `good`) — `ErrorAlert` já funciona por coincidência (`danger`/`danger-light` apontam pra `crit`/`crit-soft`), `SuccessAlert`/`ContactForm` não — conferir ao reaproveitar.

@@ -10,6 +10,7 @@
     "format": "biome format --write"
   },
   "dependencies": {
+    "@formkit/tempo": "^1.1.0",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-radio-group": "^1.2.0",
     "@radix-ui/react-select": "^2.1.1",
@@ -20,6 +21,7 @@
     "next-seo": "^7.2.0",
     "next-themes": "^0.4.6",
     "nookies": "^2.5.2",
+    "pdfmake": "^0.2.23",
     "phosphor-react": "^1.4.1",
     "postcss": "^8.5.30",
     "react": "19.3.0",
@@ -32,6 +34,7 @@
     "@biomejs/biome": "2.5.15",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
+    "@types/pdfmake": "^0.2.13",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4.3.3",

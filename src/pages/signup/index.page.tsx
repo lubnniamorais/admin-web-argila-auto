@@ -26,6 +26,7 @@ import { PlanCard } from '@/components/PlanCard';
 import { useAuth } from '@/hooks/auth';
 import { api } from '@/lib/apiClient';
 import { withSSRGuest } from '@/utils/withSSRGuest';
+import { validateCNPJ } from '@/utils/validateCNPJ';
 
 // Resposta da ViaCEP (https://viacep.com.br/ws/{cep}/json/) — "erro: true"
 // é o formato que ela usa pra CEP sintaticamente válido mas inexistente
@@ -57,7 +58,13 @@ const optionalUf = zod
 const signUpFormSchema = zod.object({
   // Passo 1 — Sobre a oficina
   workshopName: zod.string().trim().min(1, 'Informe o nome da oficina'),
-  workshopCnpj: zod.string().trim().optional(),
+  workshopCnpj: zod
+    .string()
+    .trim()
+    .refine((value) => !value || validateCNPJ(value), {
+      message: 'CNPJ inválido',
+    })
+    .optional(),
   workshopPhone: zod.string().trim().optional(),
   workshopEmail: optionalEmail,
   // Passo 1 — Endereço (opcional, ver CLAUDE.md da API: campos novos em
