@@ -1,6 +1,6 @@
 # ArgilaAuto — Admin (admin-argila-auto)
 
-> Atualizado em 2026-10-26. Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
+> Atualizado em 2026-10-27. Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
 
 ## Como trabalhar neste projeto (combinado com o usuário)
 
@@ -81,6 +81,8 @@ Mais dois estados fora da sequência:
 2. **`next/image` com `style` customizado pode gerar hydration mismatch de verdade** (visto no log do `next dev`, não só visual). Pra recortar/redimensionar fora do padrão, preferir `background-image` num `<div>` comum a brigar com o `style` do `next/image`.
 3. **Duas classes de `display` incondicionais no mesmo elemento brigam** pela ordem que o Tailwind decide gerar o CSS (não a ordem do JSX). Nunca combinar algo como `"inline-block hidden md:block"`; manter só UMA classe de display incondicional (o estado "padrão") e condicionar a outra ao mesmo breakpoint/variante (`"hidden md:inline-block"`).
 4. **`@import` de fonte externa precisa vir ANTES de `@import "tailwindcss"`** no `globals.css` — depois que o Tailwind expande, qualquer `@import` que sobrar depois quebra (regra do próprio CSS: `@import` tem que vir antes de qualquer outra regra).
+5. **`items-center` num flex `min-h-screen overflow-hidden` esconde o topo do conteúdo quando ele é mais alto que a tela** — a centralização empurra o início do elemento pra uma coordenada Y negativa, que a rolagem normal nunca alcança (confirmado: `scrollY: 0` e o `<h1>` ainda em `top: -20px`). Descoberto no `AuthShell` (`src/components/AuthShell/index.tsx`), quando o Passo 2 do Signup cortava o título. Corrigido trocando pra `items-start` + padding vertical (`py-12`) — garante que o conteúdo sempre começa visível, independente da altura. Vale pra qualquer container que centraliza verticalmente um filho de altura variável/desconhecida.
+6. **Arquivo editado pela ferramenta pode ser sobrescrito pelo autosave do editor do usuário, se ele estiver com o arquivo aberto** — sintoma: a edição é aplicada (confirmada pela própria ferramenta), mas uma leitura logo depois mostra o conteúdo antigo de volta. Se isso acontecer, confirme o conteúdo direto via shell (`grep`/`cat`, fora das ferramentas de edição) antes de insistir, e peça pra fechar/recarregar o arquivo no editor antes de tentar de novo — reaplicar a edição sem isso só vai ser sobrescrito de novo.
 
 ## Escopo: protótipo vs. capacidade real da API
 

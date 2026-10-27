@@ -81,9 +81,18 @@ export function AppShell({
           {/* Lockup completo (ícone + "ArgilaAuto") some no colapso, dando
               lugar só ao selo (iconOnly) — ver explicação na prop iconOnly
               de Logo/index.tsx. */}
-          <Logo size={26} variant='dark' className='max-[880px]:hidden' />
+          {/* size aumentado de 26 pra 36 (= o padrão do próprio componente
+              Logo) — com 26, o ícone até ficava perto do protótipo (que
+              usa um <img> de 30px pro ícone sozinho), mas o texto
+              "ArgilaAuto" embutido na MESMA imagem da lockup (ícone+texto
+              numa imagem só, proporção fixa) saía bem menor que os 16px
+              que o protótipo usa pro texto (lá, ícone e texto são
+              elementos independentes). Decisão confirmada com o usuário:
+              aumentar o tamanho geral em vez de separar ícone/texto em
+              elementos próprios (mudança estrutural maior). */}
+          <Logo size={36} variant='dark' className='max-[880px]:hidden' />
           <Logo
-            size={26}
+            size={32}
             variant='dark'
             iconOnly
             className='hidden max-[880px]:inline-block'
@@ -92,14 +101,18 @@ export function AppShell({
 
         {/* Tenant box: nome da oficina + badge do plano atual — some no
             colapso (não cabe/não faz sentido só com ícones, igual ao
-            protótipo: .tenant-box { display:none } nesse breakpoint). */}
+            protótipo: .tenant-box { display:none } nesse breakpoint).
+            Tamanhos +1px em relação ao protótipo (12.5→13.5, 10→11,
+            10.5→11.5) — decisão confirmada com o usuário: aumento
+            deliberado além da referência original, que achou os
+            tamanhos originais pequenos demais na prática. */}
         <div className='max-[880px]:hidden rounded-[10px] border border-white/10 bg-black/20 p-2.5'>
-          <div className='truncate text-[12.5px] font-bold text-white'>
+          <div className='truncate text-[13.5px] font-bold text-white'>
             {workshop?.name ?? '—'}
           </div>
           <div className='mt-2 flex items-center justify-between'>
             <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${
+              className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide ${
                 isPro
                   ? 'bg-[#F0DCC8] text-clay-deep'
                   : 'bg-white/15 text-[#F7E9DC]'
@@ -115,7 +128,7 @@ export function AppShell({
             {workshop && !isPro && (
               <Link
                 href='/configuracoes'
-                className='text-[10.5px] font-bold text-[#F0DCC8] underline'
+                className='text-[11.5px] font-bold text-[#F0DCC8] underline'
               >
                 Fazer upgrade →
               </Link>
@@ -135,10 +148,10 @@ export function AppShell({
             {user ? getInitials(user.name) : '—'}
           </div>
           <div className='min-w-0 flex-1 leading-tight max-[880px]:hidden'>
-            <div className='truncate text-xs font-bold text-white'>
+            <div className='truncate text-[13px] font-bold text-white'>
               {user?.name ?? '—'}
             </div>
-            <div className='text-[10.5px] text-white/60'>
+            <div className='text-[11.5px] text-white/60'>
               {user ? ROLE_LABEL[user.role] : '—'}
             </div>
           </div>

@@ -63,8 +63,12 @@ const NAV_GROUPS: NavGroup[] = [
 // tempo de execução nunca é detectada e nenhum CSS é gerado pra ela (bug
 // que aconteceu aqui com uma primeira versão deste arquivo, usando uma
 // constante JS pro prefixo do breakpoint).
+// Tamanhos +1px em relação ao protótipo (10→11 no rótulo, 13→14 no item,
+// ícone 17→18) — decisão confirmada com o usuário: aumento deliberado
+// além da referência original (ver mesmo comentário em AppShell, no
+// tenant-box).
 const NAV_LABEL_CLASSNAME =
-  'max-[880px]:hidden px-2.5 pt-2.5 pb-1 text-[10px] font-bold tracking-[0.09em] text-white/55 uppercase';
+  'max-[880px]:hidden px-2.5 pt-2.5 pb-1 text-[11px] font-bold tracking-[0.09em] text-white/55 uppercase';
 const NAV_ITEM_LABEL_CLASSNAME = 'max-[880px]:hidden';
 
 /**
@@ -96,12 +100,12 @@ export function Menubar() {
                 // title: só é útil de verdade no modo colapsado (ícone sem
                 // rótulo visível) — sobra inofensivo no modo expandido.
                 title={item.label}
-                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-semibold max-[880px]:justify-center ${
+                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-semibold max-[880px]:justify-center ${
                   active ? 'bg-white/15' : 'hover:bg-white/10'
                 }`}
               >
                 <ItemIcon
-                  size={17}
+                  size={18}
                   weight={active ? 'fill' : 'regular'}
                   className='flex-none opacity-90'
                 />

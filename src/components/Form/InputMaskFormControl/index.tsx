@@ -1,52 +1,46 @@
-import { InputHTMLAttributes } from 'react';
-import { Control, Controller, FieldError } from 'react-hook-form';
+import { Control, Controller, FieldValues, Path } from 'react-hook-form';
 
-import { InputMaskBase } from '../InputMask';
+import { InputMask } from '../InputMask';
 
-interface IInputMaskFormControlProps
-  extends InputHTMLAttributes<HTMLInputElement> {
-  control: Control<any>;
+interface InputMaskFormControlProps<TFieldValues extends FieldValues> {
+  control: Control<TFieldValues>;
+  name: Path<TFieldValues>;
   label: string;
-  name: string;
-  mask?: string;
-  unmask?: true | false | 'typed';
-  error?: FieldError;
+  mask: string;
+  unmask?: boolean | 'typed';
+  placeholder?: string;
+  disabled?: boolean;
 }
 
-const InputMaskFormControl = ({
+// Mesmo padrão auto-contido do InputFormControl (erro lido direto do
+// fieldState do Controller, não precisa receber "error" de fora) — ver
+// explicação em ForgotPassword/signup sobre essa diferença em relação ao
+// admin-web-amip.
+export function InputMaskFormControl<TFieldValues extends FieldValues>({
   control,
-  label,
   name,
+  label,
   mask,
   unmask = true,
-  error,
   ...rest
-}: IInputMaskFormControlProps) => {
+}: InputMaskFormControlProps<TFieldValues>) {
   return (
-    <div
-      className="w-11/12 flex flex-col items-center justify-center mx-auto mt-5 mb-6
-    text-base leading-4"
-    >
-      <Controller
-        control={control}
-        name={name}
-        render={({ field: { value, onChange } }) => (
-          <InputMaskBase
-            label={label}
-            name={name}
-            mask={mask}
-            unmask={unmask}
-            error={error}
-            value={value}
-            onAccept={(value, _) => {
-              onChange(value);
-            }}
-            {...rest}
-          />
-        )}
-      />
-    </div>
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <InputMask
+          label={label}
+          mask={mask}
+          unmask={unmask}
+          name={field.name}
+          value={field.value}
+          onBlur={field.onBlur}
+          onAccept={(value) => field.onChange(value)}
+          error={fieldState.error?.message}
+          {...rest}
+        />
+      )}
+    />
   );
-};
-
-export { InputMaskFormControl };
+}
