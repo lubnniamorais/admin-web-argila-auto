@@ -1,6 +1,6 @@
 # ArgilaAuto — Admin (admin-argila-auto)
 
-> Atualizado em 2026-10-27 (final da sessão que terminou `/configuracoes`: migração pra `@formkit/tempo` feita, logo no `.env`, tela testada no navegador e commitada). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
+> Atualizado em 2026-10-28 (final da sessão que terminou `/dashboard`: KPIs, gráfico de faturamento com Recharts, Insights por IA e tabela de OS recentes, tela testada no navegador com dados reais via API, ainda não commitada). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
 
 ## Como trabalhar neste projeto (combinado com o usuário)
 
@@ -80,7 +80,12 @@ Mais dois estados fora da sequência:
 - **Identidade visual**: tokens de cor (claro/escuro), fontes e `@theme` configurados em `globals.css`; favicon de verdade (`public/favicon.ico`, `.svg`, `favicon-96x96.png`, `apple-touch-icon.png`, gerados a partir do selo v2).
 - **Autenticação**: `/` (Welcome), `/login`, **`/signup`** (3 passos: dados da oficina+endereço → plano → sucesso/checkout) e **`/forgot-password`**+**`/reset-password`** — todas testadas de ponta a ponta contra a API real (não só unit, teste manual no navegador). Cookies `argilaauto:token`/`argilaauto:refresh_token`. `signUp` novo em `auth.tsx` (ver `AuthProvider`) — mesma lógica de `signIn` (salva token, não redireciona sozinho: quem decide pra onde ir depois é a página, já que depende do plano escolhido).
 - **Casco do app autenticado**: `AppShell` (sidebar + topbar) + `Menubar` (navegação com ícones Phosphor, colapsa pra só-ícones abaixo de 880px) + `ThemeToggle`. Tamanhos de fonte/logo da sidebar aumentados em 27/10 além do que o protótipo original pedia (decisão do usuário, protótipo ficava pequeno demais em telas grandes) — ver comentários em `AppShell`/`Menubar`.
-- **`/dashboard`** (`src/pages/dashboard/index.page.tsx`): ainda só **placeholder**, mas **desbloqueado do lado da API em 28/10** — todas as mudanças que faltavam já saíram: `ServiceOrder.customer`/`ServiceOrder.vehicle` resolvidos, `GET /service-order-payments/monthly-report` (faturamento por mês), e 2 endpoints NOVOS criados nesta sessão especificamente pro Dashboard — `GET /service-orders/summary` (`open_orders_count`/`current_month_average_ticket`) e `GET /parts/low-stock` (lista de peças com `quantity<=minimumStock`), ambos `ADMIN`/`RECEPTIONIST` only. Ver `api-argila-auto/CLAUDE.md`, seção "Dashboard — resumo de KPIs", pra detalhes de cada campo. **Falta só implementar a tela de verdade no admin** (KPIs, gráfico de faturamento via `monthly-report`, tabela de OS recentes, bloco de Insights por IA via `GET /vehicles/preventive-maintenance-insight` — Pro only).
+- **`/dashboard`** (`src/pages/dashboard/index.page.tsx`) — **concluída e testada no navegador** nesta sessão (28/10), ainda não commitada. 4 KPIs (OS em aberto, faturamento do mês, ticket médio, peças em estoque baixo), gráfico de faturamento dos últimos 6 meses (Recharts, `BarChart`), bloco de Insights por IA (Pro — lista veículo+categoria+urgência; Básico — CTA de upgrade linkando pra `/configuracoes`) e tabela de OS recentes (5 últimas, `received_at` desc). Estado vazio ("Sua oficina ainda está vazia") quando a workshop não tem nenhuma OS — replica o do protótipo.
+  - **Dados**: `src/hooks/dashboard.ts` (5 hooks TanStack Query, `queryFn` inline) — `useServiceOrdersSummary` (`GET /service-orders/summary`), `useLowStockParts` (`GET /parts/low-stock`), `useMonthlyPaymentsReport` (`GET /service-order-payments/monthly-report?months=6`), `useRecentServiceOrders` (`GET /service-orders?page=1&perPage=5`, também lê o header `x-total-count-registers` pro "de X no total" do KPI de OS em aberto), `usePreventiveMaintenanceInsight` (`GET /vehicles/preventive-maintenance-insight`, com `enabled` condicionado a `isPro` — nunca dispara a chamada numa workshop Básica, que daria 403).
+  - **Util novo**: `src/utils/orderStatus.ts` — label em PT-BR + classe Tailwind (cores semânticas `good`/`warn`/`info`/`crit` do CLAUDE.md) pros 9 valores de `OrderStatus`, decisão confirmada com o usuário pra já nascer compartilhado (vai ser reaproveitado no Kanban de Ordens de Serviço e em Orçamentos).
+  - **Gráfico — decisão confirmada com o usuário**: instalar uma lib (`recharts@^3.10.1`, já suporta React 19 nativamente) em vez de replicar o SVG manual do protótipo — primeira lib de gráfico do projeto. Cores do gráfico via CSS var (`fill='var(--clay)'` etc.) direto no SVG do Recharts — não é uma classe Tailwind montada dinamicamente, então a pegadinha #1 (classe montada por template string) não se aplica aqui.
+  - **Links decisão confirmada com o usuário**: linhas da tabela de OS recentes apontam pra `/ordens-de-servico` e o KPI de estoque baixo pra `/produtos`, mesmo nenhuma das duas telas existir ainda (dá 404 hoje) — propositalmente, pra já deixar o caminho certo quando essas telas forem construídas.
+  - **Testado com dados reais** (signup de workshop nova + seed via curl: customer/vehicle/service/part com estoque baixo/3 OS incl. uma com pagamento PIX confirmado) — KPIs, gráfico (incl. correção de um bug real: eixo Y em "k" fixo mostrava "0k" pra valores abaixo de 1000, trocado pra `Intl.NumberFormat` com `notation: 'compact'`), as 9 cores de status (testadas `PENDING_QUOTE`/`CANCELED`/`IN_PROGRESS` ao vivo, as outras 6 só por inspeção do mapeamento), bloco de IA travado (Básico) e tema claro/escuro. **Não testado**: bloco de Insights por IA com dado real de uma workshop Pro (exigiria upgrade de verdade via checkout AbacatePay, fora do escopo de um teste manual) — só o estado "sem alerta" e o estado travado (Básico) foram vistos na prática.
 - **`/configuracoes`** — **concluída, testada no navegador e commitada** nesta sessão (27/10). 3 seções empilhadas numa página só (decisão confirmada: sem abas):
   1. **Dados da oficina** — form com `PUT /workshops` (nome, telefone, e-mail, endereço via ViaCEP, `logoUrl` como campo de URL de texto — não existe upload de arquivo na API). CNPJ mostrado `disabled` (API não permite editar) — testado, confirma `disabled` com "Não informado" quando vazio.
   2. **Plano e assinatura** — lê `workshop.subscription` (`GET /workshops/me`), botões condicionais: `upgrade-to-pro`/`subscribe-to-basic` (ambos redirecionam pro checkout da AbacatePay) e `cancel-subscription` (só se Pro sem cancelamento pendente). Testado o estado Básico em trial ("Teste grátis até DD/MM/AAAA" com data correta via tempo).
@@ -161,6 +166,7 @@ Não existe endpoint de relatório de estoque — se for necessário, seria calc
 - **Radix UI**, `react-imask`, `next-themes`, `react-toastify`, `next-seo`.
 - **pdfmake** `^0.2.23` + `@types/pdfmake` — instalado em 27/10/2026 pro relatório financeiro (`src/report/`, módulo replicado do admin-web-amip).
 - **`@formkit/tempo`** `^1.1.0` — instalado e migrado em 27/10/2026 (`src/report/header.ts`, `src/pages/configuracoes/index.page.tsx`) — ver seção "Como trabalhar" no topo deste arquivo pra sintaxe de escape de literais.
+- **`recharts`** `^3.10.1` — instalado em 28/10/2026 pro gráfico de faturamento do `/dashboard` (decisão confirmada com o usuário, ver "Estado atual"). Primeira lib de gráfico do projeto; suporta React 19 nativamente (sem precisar de `--legacy-peer-deps`).
 - Alias de import: `@/*` → `./src/*` ([tsconfig.json](tsconfig.json)).
 
 ### Nota sobre o Next.js 16
@@ -178,7 +184,7 @@ src/
 │   ├── signup/index.page.tsx            # Signup, 3 passos (ver "Estado atual")
 │   ├── forgot-password/index.page.tsx   # Esqueci minha senha
 │   ├── reset-password/index.page.tsx    # Redefinir senha (lê ?token= da URL)
-│   ├── dashboard/index.page.tsx  # Dashboard — PLACEHOLDER, ver "Estado atual"
+│   ├── dashboard/index.page.tsx  # Dashboard — concluída (28/10), ver "Estado atual"
 │   └── configuracoes/index.page.tsx     # Dados da oficina + plano + relatório — ver "Estado atual" (testada e commitada)
 ├── components/
 │   ├── AppShell/       # sidebar + topbar das telas autenticadas
@@ -194,7 +200,8 @@ src/
 │   └── BulletEnabled/, Editor/, Pagination/     # QUEBRADOS, ver abaixo
 ├── hooks/
 │   ├── auth.tsx        # AuthContext (signIn, signUp, signOut, updateToken, usuário logado) — Axios direto
-│   └── workshop.ts      # useWorkshop (TanStack Query, queryFn inline), IWorkshop agora com `address`
+│   ├── workshop.ts      # useWorkshop (TanStack Query, queryFn inline), IWorkshop agora com `address`
+│   └── dashboard.ts     # 5 hooks de dados do /dashboard (TanStack Query, queryFn inline) — ver "Estado atual"
 ├── report/              # módulo de relatório em PDF (pdfmake), replicado do admin-web-amip
 │   ├── docDefinitions.ts, header.ts, footer.ts, stylesTable.ts, table.ts
 ├── lib/
@@ -205,21 +212,20 @@ src/
 └── utils/
     ├── withSSRAuth.ts   # HOC de getServerSideProps p/ rotas autenticadas
     ├── withSSRGuest.ts  # HOC de getServerSideProps p/ rotas só-para-visitante
+    ├── orderStatus.ts   # label PT-BR + cor por OrderStatus (compartilhado, usado no /dashboard e futuramente no Kanban/Orçamentos)
     └── no-image.ts
 ```
 
 ## Pendências / próximos passos
 
-**`/configuracoes` concluída nesta sessão** (27/10) — ver "Estado atual" acima. Único detalhe não coberto: gerar o PDF do relatório com linhas de pagamento reais (só o caso vazio foi testado na UI; `header.ts` foi validado isoladamente com a logo/data reais). Se for mexer em `table.ts`/`docDefinitions.ts` futuramente, vale montar uma OS com pagamento de verdade (cliente+veículo+serviço+OS via API) pra testar o PDF completo no navegador.
+**`/configuracoes` concluída** (27/10) — ver "Estado atual" acima. Único detalhe não coberto: gerar o PDF do relatório com linhas de pagamento reais (só o caso vazio foi testado na UI; `header.ts` foi validado isoladamente com a logo/data reais). Se for mexer em `table.ts`/`docDefinitions.ts` futuramente, vale montar uma OS com pagamento de verdade (cliente+veículo+serviço+OS via API) pra testar o PDF completo no navegador.
 
-**Próxima coisa a fazer: conteúdo real do `/dashboard`** — desbloqueado do lado da API em 28/10 (ver "Estado atual" acima), ainda não implementado no admin. Precisa de alinhamento com o usuário (passo a passo, como de costume) sobre layout exato antes de codar, mas os dados já têm de onde vir:
-- KPIs: `GET /service-orders/summary` (OS em aberto + ticket médio do mês) + último item de `GET /service-order-payments/monthly-report` (faturamento do mês) + `GET /parts/low-stock` (`.length` pra contagem de estoque baixo, a lista em si pra detalhe).
-- Gráfico de faturamento (últimos 6 meses): `GET /service-order-payments/monthly-report` direto.
-- Tabela de OS recentes: `GET /service-orders` (já tem `customer`/`vehicle` resolvidos, sem chamada extra).
-- Bloco de Insights por IA (Pro only): `GET /vehicles/preventive-maintenance-insight` — ver CLAUDE.md da API, "IA do plano Pro".
+**`/dashboard` concluída nesta sessão** (28/10) — ver "Estado atual" acima, inclusive o que não foi testado (Insights por IA com workshop Pro de verdade). **Ainda não commitada** — próxima sessão deve revisar e commitar (`package.json`/`package-lock.json` com `recharts` novo, `src/hooks/dashboard.ts`, `src/utils/orderStatus.ts`, `src/pages/dashboard/index.page.tsx` reescrita).
+
+**Próxima coisa a fazer: `/clientes-veiculos`** (Clientes & Veículos — tabela de clientes com veículos aninhados) — é a tela mais lógica a seguir, já que o Dashboard, o CTA do estado vazio e o botão "Cadastrar primeiro cliente" apontam pra ela, e sem ela não dá pra popular dado de teste pela UI (precisou de seed via `curl` direto na API nesta sessão). Precisa de alinhamento com o usuário (passo a passo, como de costume) sobre layout exato antes de codar.
 
 **Telas ainda não construídas** (rotas citadas no app, mas sem página — dão 404 hoje):
-- `/orcamentos`, `/ordens-de-servico` (Kanban, 9 colunas incl. `REJECTED`), `/clientes-veiculos`, `/produtos`. (Signup, forgot/reset-password e Configurações já saíram desta lista — ver "Estado atual".)
+- `/orcamentos`, `/ordens-de-servico` (Kanban, 9 colunas incl. `REJECTED`), `/clientes-veiculos`, `/produtos`. (Signup, forgot/reset-password, Configurações e Dashboard já saíram desta lista — ver "Estado atual".)
 
 **Componentes legados ainda quebrados** (do template reaproveitado — cor antiga SCREAMING_CASE inexistente nos tokens atuais, `tailwind-variants` não instalado, e/ou lib faltando): `BulletEnabled`, `Editor` (também falta `@mdxeditor/editor` inteiro), `Pagination`, `Form/AlertDialog` (falta `@radix-ui/react-alert-dialog`), `Form/SelectPicker`, `Form/Switch` (falta `@radix-ui/react-switch`). `Form/InputMask`/`Form/InputMaskFormControl` **já foram reconstruídos** (27/10, usando `react-imask` de verdade — ver "Como trabalhar" acima). **Decisão do usuário**: conserta cada um só quando a tela que precisa dele for construída, não todos de uma vez. `ContactForm` e o `Layout` antigo (shell genérico, substituído por `AppShell`/`AuthShell`) já foram **apagados** por não terem uso no produto.
 
