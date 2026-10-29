@@ -1,6 +1,6 @@
 # ArgilaAuto — Admin (admin-argila-auto)
 
-> Atualizado em 2026-10-28 (final da sessão que terminou `/dashboard`: KPIs, gráfico de faturamento com Recharts, Insights por IA e tabela de OS recentes, tela testada no navegador com dados reais via API, ainda não commitada). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
+> Atualizado em 2026-10-29 (final da sessão que terminou `/clientes-veiculos`: cadastro combinado cliente+veículo, edição de cliente e de veículo, tabela responsiva sem scroll lateral, tudo testado no navegador com dados reais via API, ainda não commitada). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
 
 ## Como trabalhar neste projeto (combinado com o usuário)
 
@@ -15,6 +15,7 @@
 - **Datas: usar `@formkit/tempo`** (pedido explícito do usuário, 27/10/2026) — **migrado** em `src/report/header.ts` e `src/pages/configuracoes/index.page.tsx`, instalado (`^1.1.0`). Uso: `format(date, 'DD/MM/YYYY', 'pt-BR')`. Escape de texto literal confirmado: **não** usa colchetes `[literal]` (sintaxe moment/dayjs) — usa **barra invertida antes de cada caractere-token** (ver `node_modules/@formkit/tempo/dist/common.mjs`, função `escapeTokens`, e `parts.mjs`). Tokens reservados de 1 char incluem `Y M D d m s H h a A Z S` — qualquer um desses dentro de texto literal precisa de `\` antes. Exemplo real (`headerReport`, "27/10/2026 às 20:45h"): `format(date, 'DD/MM/YYYY à\\s HH:mm\\h', 'pt-BR')` — "à" não precisa de escape (não é token), mas o "s" de "às" e o "h" final precisam.
 - **Lição da sessão 27/10**: nunca tentar reproduzir manualmente, em uma chamada de ferramenta, uma string base64 colada pelo usuário com mais de uns poucos milhares de caracteres — risco real de truncar/corromper (aconteceu duas vezes antes de desistir). Pedir pra salvar o arquivo em disco e passar o caminho; converter pra base64 via shell/script, nunca retypar.
 - **Referência de convenções**: `/home/lubnnia/Documentos/Projetos/Amip/admin-web-amip/` (projeto irmão, fora do ArgilaAuto) — mesmo stack (RHF+Zod+TanStack Query+Axios+Phosphor), usado como modelo pros pontos acima. Tela de referência: `src/pages/atletas/criar/index.page.tsx`. Módulo de relatório em PDF (`src/report/`) replicado de lá pro ArgilaAuto, adaptado pros tokens de cor daqui — ver `src/report/` neste projeto.
+- **Variantes de estilo: `tailwind-variants` (decisão confirmada em 29/10/2026)** — ao reconstruir um componente legado quebrado que precisa de mais de um estado visual (ex.: `Pagination`, botão habilitado/desabilitado), usar `tv()` de verdade, não uma função simples feita à mão. Isso **reverte** o que foi feito com o `InputMask`/`InputMaskFormControl` em 27/10 (reescritos só com template string, sem a lib) — ambos foram atualizados em 29/10 pra usar `tv()` também, por consistência, mas **sem reintroduzir as variantes visuais antigas** (erro/foco/preenchido) que o template quebrado tinha: `InputMask` continua visualmente idêntico ao `Input` comum (decisão confirmada à parte). `tailwind-variants` agora é dependência de verdade do projeto — ao mexer em qualquer componente da lista de "ainda quebrados" (ver "Pendências" abaixo) que só falhava por falta dessa lib, ela já está disponível.
 
 ## O que é o projeto
 
@@ -86,6 +87,17 @@ Mais dois estados fora da sequência:
   - **Gráfico — decisão confirmada com o usuário**: instalar uma lib (`recharts@^3.10.1`, já suporta React 19 nativamente) em vez de replicar o SVG manual do protótipo — primeira lib de gráfico do projeto. Cores do gráfico via CSS var (`fill='var(--clay)'` etc.) direto no SVG do Recharts — não é uma classe Tailwind montada dinamicamente, então a pegadinha #1 (classe montada por template string) não se aplica aqui.
   - **Links decisão confirmada com o usuário**: linhas da tabela de OS recentes apontam pra `/ordens-de-servico` e o KPI de estoque baixo pra `/produtos`, mesmo nenhuma das duas telas existir ainda (dá 404 hoje) — propositalmente, pra já deixar o caminho certo quando essas telas forem construídas.
   - **Testado com dados reais** (signup de workshop nova + seed via curl: customer/vehicle/service/part com estoque baixo/3 OS incl. uma com pagamento PIX confirmado) — KPIs, gráfico (incl. correção de um bug real: eixo Y em "k" fixo mostrava "0k" pra valores abaixo de 1000, trocado pra `Intl.NumberFormat` com `notation: 'compact'`), as 9 cores de status (testadas `PENDING_QUOTE`/`CANCELED`/`IN_PROGRESS` ao vivo, as outras 6 só por inspeção do mapeamento), bloco de IA travado (Básico) e tema claro/escuro. **Não testado**: bloco de Insights por IA com dado real de uma workshop Pro (exigiria upgrade de verdade via checkout AbacatePay, fora do escopo de um teste manual) — só o estado "sem alerta" e o estado travado (Básico) foram vistos na prática.
+- **`/clientes-veiculos`** (`src/pages/clientes-veiculos/index.page.tsx`) — **concluída e testada no navegador** nesta sessão (29/10), ainda não commitada. Tabela de clientes com veículos aninhados + busca + paginação + 3 modais (cadastro combinado, editar cliente, adicionar/editar veículo). Decisões confirmadas com o usuário (protótipo não cobria nenhum formulário de verdade, só placeholders):
+  - **Cadastro combinado**: 1 modal só, cliente + 1º veículo juntos (como o Signup faz com oficina+endereço) — `POST /customers` encadeado com `POST /vehicles` usando o `customerId` que voltou. Se o cliente for criado mas o veículo falhar, trata como caso à parte (`VehicleCreationFailedError`): toast específico avisando que o cliente foi salvo mas o veículo não, lista invalidada mesmo assim (o cliente existe), `onError` não trata isso como falha genérica.
+  - **Veículos adicionais**: "+ Adicionar veículo" por linha, abre o mesmo modal de veículo só que sem a parte de cliente (`customerId` fixo).
+  - **Edição**: cliente e veículo, os dois incluídos nesta entrega (`PUT /customers` / `PUT /vehicles`). `document` e `plate` não editáveis (campos âncora da API) — aparecem `disabled` nos respectivos forms, confirma visual de "Não informado"/valor atual, igual ao padrão já usado em Configurações pro CNPJ.
+  - **Documento (CPF ou CNPJ)**: 1 campo só com **máscara dinâmica** (`InputMask`/`InputMaskFormControl` agora aceitam `mask` como array de candidatas, ex. `[{mask:'000.000.000-00'},{mask:'00.000.000/0000-00'}]` — o IMask escolhe sozinho conforme a quantidade de dígitos). Validação nova: `src/utils/validateCPF.ts` (mesmo algoritmo de dígito verificador do `validateCNPJ.ts` já existente) + `src/utils/validateDocument.ts` (decide CPF ou CNPJ pelo tamanho, 11 ou 14 dígitos, e chama o validador certo).
+  - **Campos do veículo**: placa/marca/modelo/quilometragem obrigatórios, ano/cor/chassi opcionais — cor e chassi não apareciam no protótipo mas a API suporta, decisão confirmada de incluir já nesta entrega.
+  - **`Dialog` novo** (`src/components/Dialog/index.tsx`) — primeiro modal de conteúdo livre do projeto (o único que existia, `Form/AlertDialog`, é só pra confirmação sim/não e está quebrado). Instalado `@radix-ui/react-dialog` (decisão confirmada com o usuário) em vez de implementar overlay/foco/Esc na mão.
+  - **`Pagination` reconstruído** (estava quebrado, faltava `tailwind-variants`) — ver nota em "Como trabalhar" acima sobre a decisão de manter `tv()` de verdade em vez de uma função simples.
+  - **Tabela responsiva, sem scroll lateral** (correção pedida pelo usuário depois de ver print em tela estreita): tabela normal em telas largas, vira cards empilhados abaixo de 880px — **mesmo breakpoint em que a sidebar já colapsa** (`max-[880px]:`, ver `AppShell`/`Menubar`), não um breakpoint Tailwind padrão. Lista de veículos (com os botões de editar/adicionar) extraída pro componente `CustomerVehiclesList`, reaproveitado entre a tabela e os cards pra não duplicar ~50 linhas de JSX.
+  - **Dados**: `src/hooks/customers.ts` — `useCustomers` (`GET /customers`, com busca/paginação, `placeholderData: keepPreviousData` pra não piscar loading a cada página/letra digitada) + tipo `ICustomer`/`ICustomerVehicle`. **Evolução em 2 passos do embed de veículos na API** (ver `api-argila-auto/CLAUDE.md`, "Veículos embutidos em Customer"): a 1ª versão trazia um resumo reduzido (`{id,plate,brand,model,year,current_mileage}`), insuficiente pra editar veículo sem apagar `color`/`chassisNumber` (`PUT /vehicles` é um replace completo — confirmado lendo `update-vehicle-use-case.ts` na API: campo omitido vira `null`). O usuário então ampliou o presenter pra devolver o `Vehicle` **completo** dentro de `Customer.vehicles` — eliminou de vez a necessidade de uma chamada extra (`GET /vehicles/:id`) só pra editar, que chegou a ser implementada (`hooks/vehicles.ts`, `useVehicle`) e depois **removida** quando o embed completo ficou pronto.
+  - **Testado no navegador**: cadastro combinado (incl. CNPJ duplicado → 400 tratado certo), edição de cliente, edição de veículo com cor/chassi preenchidos E confirmados persistidos ao reabrir (o cenário que o replace completo da API tornava arriscado), busca com resultado e sem resultado, paginação, tabela em desktop E cards em tela estreita, e checagem de que `/signup`/`/configuracoes` (que usam o mesmo `InputMask` reescrito) continuam funcionando.
 - **`/configuracoes`** — **concluída, testada no navegador e commitada** nesta sessão (27/10). 3 seções empilhadas numa página só (decisão confirmada: sem abas):
   1. **Dados da oficina** — form com `PUT /workshops` (nome, telefone, e-mail, endereço via ViaCEP, `logoUrl` como campo de URL de texto — não existe upload de arquivo na API). CNPJ mostrado `disabled` (API não permite editar) — testado, confirma `disabled` com "Não informado" quando vazio.
   2. **Plano e assinatura** — lê `workshop.subscription` (`GET /workshops/me`), botões condicionais: `upgrade-to-pro`/`subscribe-to-basic` (ambos redirecionam pro checkout da AbacatePay) e `cancel-subscription` (só se Pro sem cancelamento pendente). Testado o estado Básico em trial ("Teste grátis até DD/MM/AAAA" com data correta via tempo).
@@ -130,7 +142,7 @@ Não existe endpoint de relatório de estoque — se for necessário, seria calc
 ### Endpoints por módulo (path — método — resumo)
 - **Workshops**: `POST /workshops/signup` (público, cria tenant+User ADMIN+Subscription BASIC) · `GET /workshops/me` · `GET/PUT /workshops` (update: nome/telefone/e-mail/**endereço completo (rua/número/complemento/bairro/cidade/UF/CEP, todos opcionais, adicionado 27/10)**/logo, CNPJ não editável) · `GET /workshops` e `DELETE /workshops/:id` (só `SUPER_ADMIN`) · `POST /workshops/upgrade-to-pro` · `POST /workshops/subscribe-to-basic` · `POST /workshops/cancel-subscription` · `GET/PUT /workshops/:id/fiscal-settings`. Resposta de `Workshop` agora sempre tem `address: {street,number,complement,neighborhood,city,state,zip_code}` (objeto aninhado, igual ao de `WorkshopFiscalSettings`).
 - **Users** (equipe): `POST /users` · `GET /users` (paginado) · `PUT /users` · `GET /users/show/:id` · `GET /users/me` · `PATCH /users/password` · `DELETE /users/:id`.
-- **Customers**: `POST /customers` · `GET /customers` · `PUT /customers` · `GET /customers/:id`. `ADMIN`/`RECEPTIONIST` criam/editam; `MECHANIC` só lista.
+- **Customers**: `POST /customers` · `GET /customers` · `PUT /customers` · `GET /customers/:id`. `ADMIN`/`RECEPTIONIST` criam/editam; `MECHANIC` só lista. **`GET /customers`/`GET /customers/:id` trazem `vehicles: Vehicle[]` embutido** (Vehicle completo, incl. `color`/`chassis_number` — adicionado 29/10/2026 a pedido do front, ver "Estado atual", `/clientes-veiculos`); `POST`/`PUT` não devolvem essa chave.
 - **Vehicles**: `POST /vehicles` · `GET /vehicles` (filtro `?customerId=`) · `PUT /vehicles` (placa não editável) · `GET /vehicles/:id` · `GET /vehicles/:id/preventive-maintenance-insight` (**plano Pro só, 403 no Básico**).
 - **Services** (catálogo): `POST/GET/PUT /services`, `GET /services/:id`.
 - **Parts** (estoque): `POST/GET/PUT /parts` (sku e quantity não editáveis via PUT), `GET /parts/:id`, `POST/GET /parts/:id/stock-movements`.
@@ -167,6 +179,8 @@ Não existe endpoint de relatório de estoque — se for necessário, seria calc
 - **pdfmake** `^0.2.23` + `@types/pdfmake` — instalado em 27/10/2026 pro relatório financeiro (`src/report/`, módulo replicado do admin-web-amip).
 - **`@formkit/tempo`** `^1.1.0` — instalado e migrado em 27/10/2026 (`src/report/header.ts`, `src/pages/configuracoes/index.page.tsx`) — ver seção "Como trabalhar" no topo deste arquivo pra sintaxe de escape de literais.
 - **`recharts`** `^3.10.1` — instalado em 28/10/2026 pro gráfico de faturamento do `/dashboard` (decisão confirmada com o usuário, ver "Estado atual"). Primeira lib de gráfico do projeto; suporta React 19 nativamente (sem precisar de `--legacy-peer-deps`).
+- **`@radix-ui/react-dialog`** — instalado em 29/10/2026 pro componente `Dialog` novo (ver "Estado atual", `/clientes-veiculos`). Mesma família do `@radix-ui/react-select`/`@radix-ui/react-radio-group` já usados.
+- **`tailwind-variants`** — instalado (de volta) em 29/10/2026, decisão confirmada com o usuário (ver "Como trabalhar" acima) — usar `tv()` de verdade em componentes com mais de um estado visual, em vez de uma função simples feita à mão.
 - Alias de import: `@/*` → `./src/*` ([tsconfig.json](tsconfig.json)).
 
 ### Nota sobre o Next.js 16
@@ -185,7 +199,8 @@ src/
 │   ├── forgot-password/index.page.tsx   # Esqueci minha senha
 │   ├── reset-password/index.page.tsx    # Redefinir senha (lê ?token= da URL)
 │   ├── dashboard/index.page.tsx  # Dashboard — concluída (28/10), ver "Estado atual"
-│   └── configuracoes/index.page.tsx     # Dados da oficina + plano + relatório — ver "Estado atual" (testada e commitada)
+│   ├── configuracoes/index.page.tsx     # Dados da oficina + plano + relatório — ver "Estado atual" (testada e commitada)
+│   └── clientes-veiculos/index.page.tsx # Clientes & Veículos — concluída (29/10), ver "Estado atual"
 ├── components/
 │   ├── AppShell/       # sidebar + topbar das telas autenticadas
 │   ├── AuthShell/      # moldura das telas de auth (Welcome/Login/Signup/forgot-reset-password)
@@ -193,15 +208,18 @@ src/
 │   ├── Menubar/        # navegação da sidebar (ícones Phosphor, colapsa <880px)
 │   ├── ThemeToggle/    # toggle de tema (ícone sol/lua)
 │   ├── PlanCard/       # card de plano selecionável (RadioGroup do Radix), usado no Signup
+│   ├── Dialog/         # modal de conteúdo livre (Radix Dialog), novo em 29/10 — ver "Estado atual"
+│   ├── Pagination/     # reconstruído em 29/10 (tailwind-variants) — ver "Como trabalhar"
 │   ├── Form/
-│   │   ├── Button/, Input/, InputFormControl/, ForgotPassword/, InputMask/, InputMaskFormControl/   # reconstruídos, OK (InputMask* reconstruído em 27/10 — era QUEBRADO, ver histórico se precisar)
-│   │   └── AlertDialog/, SelectPicker/, Switch/  # ainda QUEBRADOS, ver abaixo
+│   │   ├── Button/, Input/, InputFormControl/, ForgotPassword/, InputMask/, InputMaskFormControl/   # reconstruídos, OK (InputMask* reescrito 27/10, atualizado 29/10 pra tailwind-variants + máscara dinâmica — ver "Como trabalhar"/"Estado atual")
+│   │   └── AlertDialog/, SelectPicker/, Switch/  # ainda QUEBRADOS, ver abaixo (SelectPicker só falta uso — tailwind-variants já foi instalado)
 │   ├── Container/, ErrorAlert/, SuccessAlert/   # reaproveitáveis, token de cor a conferir ao usar
-│   └── BulletEnabled/, Editor/, Pagination/     # QUEBRADOS, ver abaixo
+│   └── BulletEnabled/, Editor/     # QUEBRADOS, ver abaixo
 ├── hooks/
 │   ├── auth.tsx        # AuthContext (signIn, signUp, signOut, updateToken, usuário logado) — Axios direto
 │   ├── workshop.ts      # useWorkshop (TanStack Query, queryFn inline), IWorkshop agora com `address`
-│   └── dashboard.ts     # 5 hooks de dados do /dashboard (TanStack Query, queryFn inline) — ver "Estado atual"
+│   ├── dashboard.ts     # 5 hooks de dados do /dashboard (TanStack Query, queryFn inline) — ver "Estado atual"
+│   └── customers.ts     # useCustomers (TanStack Query) — ICustomer/ICustomerVehicle, ver "Estado atual"
 ├── report/              # módulo de relatório em PDF (pdfmake), replicado do admin-web-amip
 │   ├── docDefinitions.ts, header.ts, footer.ts, stylesTable.ts, table.ts
 ├── lib/
@@ -213,6 +231,7 @@ src/
     ├── withSSRAuth.ts   # HOC de getServerSideProps p/ rotas autenticadas
     ├── withSSRGuest.ts  # HOC de getServerSideProps p/ rotas só-para-visitante
     ├── orderStatus.ts   # label PT-BR + cor por OrderStatus (compartilhado, usado no /dashboard e futuramente no Kanban/Orçamentos)
+    ├── validateCNPJ.ts, validateCPF.ts, validateDocument.ts   # validação de dígito verificador — validateDocument decide CPF/CNPJ pelo tamanho
     └── no-image.ts
 ```
 
@@ -220,14 +239,16 @@ src/
 
 **`/configuracoes` concluída** (27/10) — ver "Estado atual" acima. Único detalhe não coberto: gerar o PDF do relatório com linhas de pagamento reais (só o caso vazio foi testado na UI; `header.ts` foi validado isoladamente com a logo/data reais). Se for mexer em `table.ts`/`docDefinitions.ts` futuramente, vale montar uma OS com pagamento de verdade (cliente+veículo+serviço+OS via API) pra testar o PDF completo no navegador.
 
-**`/dashboard` concluída nesta sessão** (28/10) — ver "Estado atual" acima, inclusive o que não foi testado (Insights por IA com workshop Pro de verdade). **Ainda não commitada** — próxima sessão deve revisar e commitar (`package.json`/`package-lock.json` com `recharts` novo, `src/hooks/dashboard.ts`, `src/utils/orderStatus.ts`, `src/pages/dashboard/index.page.tsx` reescrita).
+**`/dashboard` concluída** (28/10, commitada em `2822e92`) — ver "Estado atual" acima, inclusive o que não foi testado (Insights por IA com workshop Pro de verdade). Há uma mudança pequena e ainda não commitada em `dashboard/index.page.tsx` (`h-[220px]` → `h-55`, ajuste manual do usuário no editor, 29/10) — incluir no próximo commit.
 
-**Próxima coisa a fazer: `/clientes-veiculos`** (Clientes & Veículos — tabela de clientes com veículos aninhados) — é a tela mais lógica a seguir, já que o Dashboard, o CTA do estado vazio e o botão "Cadastrar primeiro cliente" apontam pra ela, e sem ela não dá pra popular dado de teste pela UI (precisou de seed via `curl` direto na API nesta sessão). Precisa de alinhamento com o usuário (passo a passo, como de costume) sobre layout exato antes de codar.
+**`/clientes-veiculos` concluída nesta sessão** (29/10) — ver "Estado atual" acima, inclusive o que foi testado. **Ainda não commitada** — próxima sessão deve revisar e commitar (`package.json`/`package-lock.json` com `@radix-ui/react-dialog`/`tailwind-variants` novos, `src/components/Dialog/`, `src/components/Pagination/` reescrito, `src/components/Form/InputMask*` atualizados, `src/hooks/customers.ts`, `src/utils/validateCPF.ts`/`validateDocument.ts`, `src/pages/clientes-veiculos/`).
+
+**Próxima coisa a fazer**: sem uma próxima tela óbvia já combinada — as que faltam (`/orcamentos`, `/ordens-de-servico`, `/produtos`) pedem alinhamento de layout com o usuário antes de começar, como de costume.
 
 **Telas ainda não construídas** (rotas citadas no app, mas sem página — dão 404 hoje):
-- `/orcamentos`, `/ordens-de-servico` (Kanban, 9 colunas incl. `REJECTED`), `/clientes-veiculos`, `/produtos`. (Signup, forgot/reset-password, Configurações e Dashboard já saíram desta lista — ver "Estado atual".)
+- `/orcamentos`, `/ordens-de-servico` (Kanban, 9 colunas incl. `REJECTED`), `/produtos`. (Signup, forgot/reset-password, Configurações, Dashboard e Clientes & Veículos já saíram desta lista — ver "Estado atual".)
 
-**Componentes legados ainda quebrados** (do template reaproveitado — cor antiga SCREAMING_CASE inexistente nos tokens atuais, `tailwind-variants` não instalado, e/ou lib faltando): `BulletEnabled`, `Editor` (também falta `@mdxeditor/editor` inteiro), `Pagination`, `Form/AlertDialog` (falta `@radix-ui/react-alert-dialog`), `Form/SelectPicker`, `Form/Switch` (falta `@radix-ui/react-switch`). `Form/InputMask`/`Form/InputMaskFormControl` **já foram reconstruídos** (27/10, usando `react-imask` de verdade — ver "Como trabalhar" acima). **Decisão do usuário**: conserta cada um só quando a tela que precisa dele for construída, não todos de uma vez. `ContactForm` e o `Layout` antigo (shell genérico, substituído por `AppShell`/`AuthShell`) já foram **apagados** por não terem uso no produto.
+**Componentes legados ainda quebrados** (do template reaproveitado — cor antiga SCREAMING_CASE inexistente nos tokens atuais, e/ou lib faltando): `BulletEnabled`, `Editor` (falta `@mdxeditor/editor` inteiro), `Form/AlertDialog` (falta `@radix-ui/react-alert-dialog` — note: **não** é o mesmo pacote do `Dialog` novo, que usa `@radix-ui/react-dialog`), `Form/Switch` (falta `@radix-ui/react-switch`). `Form/SelectPicker` só faltava `tailwind-variants` (já instalado em 29/10) — não foi testado/usado ainda, mas deve compilar; conferir quando alguma tela precisar dele. `Form/InputMask`/`Form/InputMaskFormControl` e `Pagination` **já foram reconstruídos** (27/10 e 29/10 — ver "Como trabalhar" acima). **Decisão do usuário**: conserta cada um só quando a tela que precisa dele for construída, não todos de uma vez. `ContactForm` e o `Layout` antigo (shell genérico, substituído por `AppShell`/`AuthShell`) já foram **apagados** por não terem uso no produto.
 
 **Pendências técnicas menores**:
 - `Container`/`ErrorAlert`/`SuccessAlert` usam uma paleta semântica (`primary`, `success`) parcialmente diferente da nossa (`clay`, `good`) — `ErrorAlert` já funciona por coincidência (`danger`/`danger-light` apontam pra `crit`/`crit-soft`), `SuccessAlert`/`ContactForm` não — conferir ao reaproveitar.

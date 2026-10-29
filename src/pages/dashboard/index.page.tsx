@@ -245,7 +245,7 @@ export default function DashboardPage() {
               <h3 className='font-display text-[15px] font-bold'>
                 Faturamento — últimos 6 meses
               </h3>
-              <div className='mt-4 h-[220px]'>
+              <div className='mt-4 h-55'>
                 <ResponsiveContainer width='100%' height='100%'>
                   <BarChart data={chartData}>
                     <CartesianGrid

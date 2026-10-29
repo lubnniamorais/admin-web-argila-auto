@@ -4,170 +4,99 @@ import {
   CaretLeft,
   CaretRight,
 } from 'phosphor-react';
-import { ButtonHTMLAttributes, ComponentProps } from 'react';
-import { tv, VariantProps } from 'tailwind-variants';
+import { tv } from 'tailwind-variants';
 
+// Reconstruído a partir do template antigo (ver CLAUDE.md, "Componentes
+// legados ainda quebrados"): a versão original já usava `tailwind-variants`
+// (decisão do usuário: manter a lib, só trocar as cores SCREAMING_CASE
+// que não existem nos tokens do ArgilaAuto — ex: `bg-LIGHT_BLUE_700` —
+// pelos tokens atuais). Mesma API de props de antes (pageCurrent/
+// totalCount/perPage/onPageChange); o `styleButton` do template antigo
+// virou uma variante interna (`enabled`), decidida aqui dentro conforme
+// o botão faz sentido ou não pra página atual, em vez de vir de fora.
 const paginationButton = tv({
-  base: [
-    'w-7 h-7 flex justify-center items-center',
-    'rounded-md p-0 text-base font-bold text-WHITE',
-  ],
+  base: 'flex h-7 w-7 items-center justify-center rounded-md p-0 text-white transition-colors',
   variants: {
-    styleButton: {
-      enabled: 'bg-LIGHT_BLUE_700 hover:bg-LIGHT_BLUE_800',
-      disabled: 'bg-OFF_WHITE_500 hover:bg-OFF_WHITE_600 cursor-not-allowed',
+    enabled: {
+      true: 'bg-clay hover:bg-clay-deep',
+      false: 'cursor-not-allowed bg-border-strong',
     },
   },
-
   defaultVariants: {
-    styleButton: 'enabled',
+    enabled: true,
   },
 });
 
-type PaginationButtonVariants = ButtonHTMLAttributes<HTMLButtonElement> &
-  VariantProps<typeof paginationButton>;
-
-interface PaginationProps extends PaginationButtonVariants {
+interface PaginationProps {
   pageCurrent: number;
   totalCount: number;
   perPage: number;
   onPageChange: (pageCurrent: number) => Promise<void> | void;
 }
 
-const Pagination = ({
+export function Pagination({
   pageCurrent,
   totalCount,
   perPage,
-  styleButton = 'enabled',
   onPageChange,
-}: PaginationProps) => {
+}: PaginationProps) {
   const pages = Math.ceil(totalCount / perPage) || 1;
+  const isFirstPage = pageCurrent === 1;
+  const isLastPage = pageCurrent >= pages;
 
   return (
-    <div
-      className="flex flex-row items-end justify-between gap-1 mt-10
-      xs:flex-col
-      sm:flex-col
-      md:flex-row
-      lg:flex-row
-      xl:flex-row
-      2xl:flex-row
-      3xl:flex-row"
-    >
-      <div>
-        <span>Total de {totalCount} item(s)</span>
-      </div>
+    <div className='mt-6 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center'>
+      <span className='text-[13px] text-text-muted'>
+        Total de {totalCount} item(ns)
+      </span>
 
-      <div
-        className="flex items-end gap-5
-        xs:flex-col
-        sm:flex-col
-        md:flex-row
-        lg:flex-row
-        xl:flex-row
-        2xl:flex-row
-        3xl:flex-row"
-      >
-        <div className="flex text-base">
+      <div className='flex items-center gap-4'>
+        <span className='text-[13px] text-text-muted'>
           Página {pageCurrent} de {pages}
-        </div>
+        </span>
 
-        <div className="flex items-center gap-3">
-          {pageCurrent === 1 ? (
-            <button
-              className={paginationButton({ styleButton: 'disabled' })}
-              type="button"
-              onClick={() => {
-                onPageChange(1);
-              }}
-              disabled={true}
-            >
-              <CaretDoubleLeft size={20} />
-            </button>
-          ) : (
-            <button
-              className={paginationButton({ styleButton })}
-              type="button"
-              onClick={() => {
-                onPageChange(1);
-              }}
-            >
-              <CaretDoubleLeft size={20} />
-            </button>
-          )}
+        <div className='flex items-center gap-2'>
+          <button
+            type='button'
+            className={paginationButton({ enabled: !isFirstPage })}
+            onClick={() => onPageChange(1)}
+            disabled={isFirstPage}
+            aria-label='Primeira página'
+          >
+            <CaretDoubleLeft size={16} />
+          </button>
 
-          {pageCurrent === 1 ? (
-            <button
-              className={paginationButton({ styleButton: 'disabled' })}
-              type="button"
-              onClick={() => {
-                onPageChange(pageCurrent - 1);
-              }}
-              disabled={true}
-            >
-              <CaretLeft size={20} />
-            </button>
-          ) : (
-            <button
-              className={paginationButton({ styleButton })}
-              type="button"
-              onClick={() => {
-                onPageChange(pageCurrent - 1);
-              }}
-            >
-              <CaretLeft size={20} />
-            </button>
-          )}
+          <button
+            type='button'
+            className={paginationButton({ enabled: !isFirstPage })}
+            onClick={() => onPageChange(pageCurrent - 1)}
+            disabled={isFirstPage}
+            aria-label='Página anterior'
+          >
+            <CaretLeft size={16} />
+          </button>
 
-          {pages < pageCurrent + 1 ? (
-            <button
-              className={paginationButton({ styleButton: 'disabled' })}
-              type="button"
-              onClick={() => {
-                onPageChange(pageCurrent + 1);
-              }}
-              disabled={true}
-            >
-              <CaretRight size={20} />
-            </button>
-          ) : (
-            <button
-              className={paginationButton({ styleButton })}
-              type="button"
-              onClick={() => {
-                onPageChange(pageCurrent + 1);
-              }}
-            >
-              <CaretRight size={20} />
-            </button>
-          )}
+          <button
+            type='button'
+            className={paginationButton({ enabled: !isLastPage })}
+            onClick={() => onPageChange(pageCurrent + 1)}
+            disabled={isLastPage}
+            aria-label='Próxima página'
+          >
+            <CaretRight size={16} />
+          </button>
 
-          {pages < pageCurrent + 1 ? (
-            <button
-              className={paginationButton({ styleButton: 'disabled' })}
-              type="button"
-              onClick={() => {
-                onPageChange(pages);
-              }}
-              disabled={true}
-            >
-              <CaretDoubleRight size={20} />
-            </button>
-          ) : (
-            <button
-              className={paginationButton({ styleButton })}
-              type="button"
-              onClick={() => {
-                onPageChange(pages);
-              }}
-            >
-              <CaretDoubleRight size={20} />
-            </button>
-          )}
+          <button
+            type='button'
+            className={paginationButton({ enabled: !isLastPage })}
+            onClick={() => onPageChange(pages)}
+            disabled={isLastPage}
+            aria-label='Última página'
+          >
+            <CaretDoubleRight size={16} />
+          </button>
         </div>
       </div>
     </div>
   );
-};
-
-export { Pagination };
+}

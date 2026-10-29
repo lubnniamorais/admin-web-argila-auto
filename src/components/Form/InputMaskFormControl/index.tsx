@@ -2,11 +2,15 @@ import { Control, Controller, FieldValues, Path } from 'react-hook-form';
 
 import { InputMask } from '../InputMask';
 
+// Mesmo tipo do InputMask (ver comentário lá) — string pra máscara fixa,
+// ou array de candidatas pro IMask escolher sozinho (ex: CPF/CNPJ).
+type InputMaskPattern = string | Array<{ mask: string }>;
+
 interface InputMaskFormControlProps<TFieldValues extends FieldValues> {
   control: Control<TFieldValues>;
   name: Path<TFieldValues>;
   label: string;
-  mask: string;
+  mask: InputMaskPattern;
   unmask?: boolean | 'typed';
   placeholder?: string;
   disabled?: boolean;
