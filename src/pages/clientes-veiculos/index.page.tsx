@@ -1,14 +1,16 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import Head from 'next/head';
-import { MagnifyingGlass, Pencil, Plus, UserPlus } from 'phosphor-react';
-import { useEffect, useState } from 'react';
+import { MagnifyingGlass, Pencil, Plus, Trash, UserPlus } from 'phosphor-react';
+import { useCallback, useEffect, useState } from 'react';
 import { SubmitHandler, useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { z as zod } from 'zod';
 
 import { AppShell } from '@/components/AppShell';
 import { Dialog } from '@/components/Dialog';
+import { AlertDialog } from '@/components/Form/AlertDialog';
 import { Button, buttonClassName } from '@/components/Form/Button';
 import { InputFormControl } from '@/components/Form/InputFormControl';
 import { InputMaskFormControl } from '@/components/Form/InputMaskFormControl';
@@ -17,6 +19,23 @@ import { ICustomer, ICustomerVehicle, useCustomers } from '@/hooks/customers';
 import { api } from '@/lib/apiClient';
 import { validateDocument } from '@/utils/validateDocument';
 import { withSSRAuth } from '@/utils/withSSRAuth';
+
+// ============ VIACEP (mesmo padrão do Signup/Configurações) ============
+interface IAddressViaCep {
+  logradouro: string;
+  bairro: string;
+  uf: string;
+  localidade: string;
+  erro?: boolean;
+}
+
+// Mesma validação de UF do form da oficina em Configurações.
+const optionalUf = zod
+  .union([
+    zod.literal(''),
+    zod.string().trim().length(2, 'UF deve ter 2 letras'),
+  ])
+  .optional();
 
 // ============ SCHEMA: CADASTRO COMBINADO (cliente + 1º veículo) ============
 // Decisão confirmada com o usuário: o 1º cadastro do cliente já inclui o
@@ -50,7 +69,17 @@ const createCustomerWithVehicleFormSchema = zod.object({
     .refine((value) => validateDocument(value), 'CPF ou CNPJ inválido'),
   customerPhone: zod.string().trim().min(1, 'Informe o telefone'),
   customerEmail: optionalEmail,
-  customerAddress: zod.string().trim().optional(),
+  // Endereço estruturado (mesmo padrão do form da oficina em
+  // Configurações) — preenchido via busca por CEP (ViaCEP), todos
+  // opcionais (ver api-argila-auto, commit "feat: turn Customer.address
+  // into a structured address").
+  customerAddressStreet: zod.string().trim().optional(),
+  customerAddressNumber: zod.string().trim().optional(),
+  customerAddressComplement: zod.string().trim().optional(),
+  customerAddressNeighborhood: zod.string().trim().optional(),
+  customerAddressCity: zod.string().trim().optional(),
+  customerAddressState: optionalUf,
+  customerAddressZipCode: zod.string().trim().optional(),
 
   // Veículo (1º do cliente)
   vehiclePlate: zod.string().trim().min(1, 'Informe a placa'),
@@ -92,7 +121,13 @@ const editCustomerFormSchema = zod.object({
   name: zod.string().trim().min(1, 'Informe o nome do cliente'),
   phone: zod.string().trim().min(1, 'Informe o telefone'),
   email: optionalEmail,
-  address: zod.string().trim().optional(),
+  addressStreet: zod.string().trim().optional(),
+  addressNumber: zod.string().trim().optional(),
+  addressComplement: zod.string().trim().optional(),
+  addressNeighborhood: zod.string().trim().optional(),
+  addressCity: zod.string().trim().optional(),
+  addressState: optionalUf,
+  addressZipCode: zod.string().trim().optional(),
 });
 
 type IEditCustomerFormData = zod.infer<typeof editCustomerFormSchema>;
@@ -151,7 +186,14 @@ const SEARCH_DEBOUNCE_MS = 400;
 // Documento vem sempre só-dígitos da API (ver validateDocument.ts/mask
 // dinâmica no formulário, que manda unmasked pro backend) — formatação é
 // só cosmética, pra exibição na tabela.
-function formatDocument(document: string): string {
+// `null` só acontece pra um cliente anonimizado (ver ICustomer.active em
+// hooks/customers.ts) — na prática não aparece na listagem padrão, mas
+// o tipo aceita pra não quebrar o cliente editado como somente-leitura.
+function formatDocument(document: string | null): string {
+  if (!document) {
+    return '—';
+  }
+
   const cleaned = document.replace(/[^\d]+/g, '');
 
   if (cleaned.length === 11) {
@@ -174,7 +216,11 @@ function formatDocument(document: string): string {
 // "(21) 98877-1234" a partir de "21988771234" — mesmo racional de
 // formatDocument acima, cosmético pra exibição (o telefone já chega
 // só-dígitos da API, igual ao document).
-function formatPhone(phone: string): string {
+function formatPhone(phone: string | null): string {
+  if (!phone) {
+    return '—';
+  }
+
   const cleaned = phone.replace(/[^\d]+/g, '');
 
   if (cleaned.length === 11) {
@@ -285,6 +331,8 @@ export default function ClientesVeiculosPage() {
     control: createControl,
     handleSubmit: handleCreateSubmit,
     reset: resetCreateForm,
+    watch: watchCreateForm,
+    setValue: setCreateFormValue,
   } = useForm<ICreateCustomerWithVehicleFormData>({
     resolver: zodResolver(createCustomerWithVehicleFormSchema),
     defaultValues: {
@@ -292,7 +340,13 @@ export default function ClientesVeiculosPage() {
       customerDocument: '',
       customerPhone: '',
       customerEmail: '',
-      customerAddress: '',
+      customerAddressStreet: '',
+      customerAddressNumber: '',
+      customerAddressComplement: '',
+      customerAddressNeighborhood: '',
+      customerAddressCity: '',
+      customerAddressState: '',
+      customerAddressZipCode: '',
       vehiclePlate: '',
       vehicleBrand: '',
       vehicleModel: '',
@@ -302,6 +356,55 @@ export default function ClientesVeiculosPage() {
       vehicleCurrentMileage: '0' as unknown as number,
     },
   });
+
+  // Busca endereço via ViaCEP — mesmo código do Signup/Configurações
+  // (ver comentário lá).
+  const [
+    isLoadingSearchCreateAddressByZipCode,
+    setIsLoadingSearchCreateAddressByZipCode,
+  ] = useState(false);
+  const createAddressZipCodeField = watchCreateForm('customerAddressZipCode');
+
+  const handleSearchCreateAddressByZipCode = useCallback(async () => {
+    if (!createAddressZipCodeField) {
+      toast.error('Informe um CEP pra buscar.', {
+        position: 'bottom-center',
+        autoClose: 4000,
+      });
+      return;
+    }
+
+    try {
+      setIsLoadingSearchCreateAddressByZipCode(true);
+
+      const response = await axios.get(
+        `https://viacep.com.br/ws/${createAddressZipCodeField}/json/`
+      );
+
+      const { logradouro, bairro, localidade, uf, erro } =
+        response.data as IAddressViaCep;
+
+      if (erro) {
+        toast.error('CEP não encontrado.', {
+          position: 'bottom-center',
+          autoClose: 4000,
+        });
+        return;
+      }
+
+      setCreateFormValue('customerAddressStreet', logradouro);
+      setCreateFormValue('customerAddressNeighborhood', bairro);
+      setCreateFormValue('customerAddressCity', localidade);
+      setCreateFormValue('customerAddressState', uf);
+    } catch {
+      toast.error('CEP inválido.', {
+        position: 'bottom-center',
+        autoClose: 4000,
+      });
+    } finally {
+      setIsLoadingSearchCreateAddressByZipCode(false);
+    }
+  }, [createAddressZipCodeField, setCreateFormValue]);
 
   // MUTATION CREATE CUSTOMER WITH VEHICLE
   const {
@@ -317,7 +420,13 @@ export default function ClientesVeiculosPage() {
       customerDocument,
       customerPhone,
       customerEmail,
-      customerAddress,
+      customerAddressStreet,
+      customerAddressNumber,
+      customerAddressComplement,
+      customerAddressNeighborhood,
+      customerAddressCity,
+      customerAddressState,
+      customerAddressZipCode,
       vehiclePlate,
       vehicleBrand,
       vehicleModel,
@@ -331,7 +440,13 @@ export default function ClientesVeiculosPage() {
         document: customerDocument,
         phone: customerPhone,
         email: customerEmail || null,
-        address: customerAddress || null,
+        addressStreet: customerAddressStreet || null,
+        addressNumber: customerAddressNumber || null,
+        addressComplement: customerAddressComplement || null,
+        addressNeighborhood: customerAddressNeighborhood || null,
+        addressCity: customerAddressCity || null,
+        addressState: customerAddressState || null,
+        addressZipCode: customerAddressZipCode || null,
       });
 
       const customerId = customerResponse.data.customer.id as string;
@@ -414,9 +529,22 @@ export default function ClientesVeiculosPage() {
     control: editControl,
     handleSubmit: handleEditSubmit,
     reset: resetEditForm,
+    watch: watchEditForm,
+    setValue: setEditFormValue,
   } = useForm<IEditCustomerFormData>({
     resolver: zodResolver(editCustomerFormSchema),
-    defaultValues: { name: '', phone: '', email: '', address: '' },
+    defaultValues: {
+      name: '',
+      phone: '',
+      email: '',
+      addressStreet: '',
+      addressNumber: '',
+      addressComplement: '',
+      addressNeighborhood: '',
+      addressCity: '',
+      addressState: '',
+      addressZipCode: '',
+    },
   });
 
   // Preenche o formulário assim que um cliente é escolhido pra editar
@@ -430,11 +558,65 @@ export default function ClientesVeiculosPage() {
 
     resetEditForm({
       name: editingCustomer.name,
-      phone: editingCustomer.phone,
+      phone: editingCustomer.phone ?? '',
       email: editingCustomer.email ?? '',
-      address: editingCustomer.address ?? '',
+      addressStreet: editingCustomer.address.street ?? '',
+      addressNumber: editingCustomer.address.number ?? '',
+      addressComplement: editingCustomer.address.complement ?? '',
+      addressNeighborhood: editingCustomer.address.neighborhood ?? '',
+      addressCity: editingCustomer.address.city ?? '',
+      addressState: editingCustomer.address.state ?? '',
+      addressZipCode: editingCustomer.address.zip_code ?? '',
     });
   }, [editingCustomer, resetEditForm]);
+
+  // Busca endereço via ViaCEP — mesmo código do form de cadastro acima.
+  const [
+    isLoadingSearchEditAddressByZipCode,
+    setIsLoadingSearchEditAddressByZipCode,
+  ] = useState(false);
+  const editAddressZipCodeField = watchEditForm('addressZipCode');
+
+  const handleSearchEditAddressByZipCode = useCallback(async () => {
+    if (!editAddressZipCodeField) {
+      toast.error('Informe um CEP pra buscar.', {
+        position: 'bottom-center',
+        autoClose: 4000,
+      });
+      return;
+    }
+
+    try {
+      setIsLoadingSearchEditAddressByZipCode(true);
+
+      const response = await axios.get(
+        `https://viacep.com.br/ws/${editAddressZipCodeField}/json/`
+      );
+
+      const { logradouro, bairro, localidade, uf, erro } =
+        response.data as IAddressViaCep;
+
+      if (erro) {
+        toast.error('CEP não encontrado.', {
+          position: 'bottom-center',
+          autoClose: 4000,
+        });
+        return;
+      }
+
+      setEditFormValue('addressStreet', logradouro);
+      setEditFormValue('addressNeighborhood', bairro);
+      setEditFormValue('addressCity', localidade);
+      setEditFormValue('addressState', uf);
+    } catch {
+      toast.error('CEP inválido.', {
+        position: 'bottom-center',
+        autoClose: 4000,
+      });
+    } finally {
+      setIsLoadingSearchEditAddressByZipCode(false);
+    }
+  }, [editAddressZipCodeField, setEditFormValue]);
 
   // MUTATION UPDATE CUSTOMER
   const { mutateAsync: updateCustomerMutate, isPending: isLoadingEdit } =
@@ -443,7 +625,13 @@ export default function ClientesVeiculosPage() {
         name,
         phone,
         email,
-        address,
+        addressStreet,
+        addressNumber,
+        addressComplement,
+        addressNeighborhood,
+        addressCity,
+        addressState,
+        addressZipCode,
       }: IEditCustomerFormData) => {
         if (!editingCustomer) {
           return;
@@ -454,7 +642,13 @@ export default function ClientesVeiculosPage() {
           name,
           phone,
           email: email || null,
-          address: address || null,
+          addressStreet: addressStreet || null,
+          addressNumber: addressNumber || null,
+          addressComplement: addressComplement || null,
+          addressNeighborhood: addressNeighborhood || null,
+          addressCity: addressCity || null,
+          addressState: addressState || null,
+          addressZipCode: addressZipCode || null,
         });
       },
       onSuccess: () => {
@@ -485,6 +679,56 @@ export default function ClientesVeiculosPage() {
     }
   };
   // ============ FIM MODAL: EDITAR CLIENTE ============
+
+  // ============ EXCLUIR CLIENTE ============
+  // `null` = nenhum pedido de exclusão em andamento; um ICustomer = o
+  // AlertDialog de confirmação está aberto pra ESSE cliente. Não é um
+  // form — é uma ação direta (sem RHF), mesmo padrão das mutations de
+  // plano em Configurações (upgradeToPro/cancelSubscription), que também
+  // não vêm de um <form>.
+  const [customerToDelete, setCustomerToDelete] = useState<ICustomer | null>(
+    null
+  );
+
+  // MUTATION DELETE CUSTOMER
+  const { mutateAsync: deleteCustomerMutate, isPending: isLoadingDelete } =
+    useMutation({
+      mutationFn: async () => {
+        if (!customerToDelete) {
+          return;
+        }
+
+        await api.delete(`/customers/${customerToDelete.id}`);
+      },
+      onSuccess: () => {
+        // A API não diz se foi exclusão de verdade ou anonimização (ver
+        // DELETE /customers/{id} no openapi.yaml da API) — "removido" é
+        // verdade nos dois casos, sem prometer um dos dois.
+        toast.success('Cliente removido.', {
+          position: 'bottom-center',
+          autoClose: 4000,
+        });
+
+        queryClient.invalidateQueries({ queryKey: ['customers'] });
+        setCustomerToDelete(null);
+      },
+      onError: () => {
+        toast.error('Não foi possível remover o cliente.', {
+          position: 'bottom-center',
+          autoClose: 5000,
+        });
+      },
+    });
+  // END MUTATION DELETE CUSTOMER
+
+  const handleDeleteCustomer = useCallback(async () => {
+    try {
+      await deleteCustomerMutate();
+    } catch {
+      // erro já tratado no onError da mutation acima.
+    }
+  }, [deleteCustomerMutate]);
+  // ============ FIM EXCLUIR CLIENTE ============
 
   // ============ MODAL: ADICIONAR/EDITAR VEÍCULO ============
   const [vehicleModal, setVehicleModal] = useState<IVehicleModalState | null>(
@@ -533,7 +777,7 @@ export default function ClientesVeiculosPage() {
     const { vehicle } = vehicleModal;
 
     resetVehicleForm({
-      plate: vehicle.plate,
+      plate: vehicle.plate ?? '',
       brand: vehicle.brand,
       model: vehicle.model,
       year: vehicle.year ?? undefined,
@@ -752,14 +996,24 @@ export default function ClientesVeiculosPage() {
                           />
                         </td>
                         <td className='py-2.5'>
-                          <button
-                            type='button'
-                            onClick={() => setEditingCustomer(customer)}
-                            aria-label={`Editar ${customer.name}`}
-                            className='text-text-muted transition-colors hover:text-clay'
-                          >
-                            <Pencil size={15} />
-                          </button>
+                          <div className='flex items-center gap-3'>
+                            <button
+                              type='button'
+                              onClick={() => setEditingCustomer(customer)}
+                              aria-label={`Editar ${customer.name}`}
+                              className='text-text-muted transition-colors hover:text-clay'
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              type='button'
+                              onClick={() => setCustomerToDelete(customer)}
+                              aria-label={`Excluir ${customer.name}`}
+                              className='text-text-muted transition-colors hover:text-crit'
+                            >
+                              <Trash size={15} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -788,14 +1042,24 @@ export default function ClientesVeiculosPage() {
                           {formatPhone(customer.phone)}
                         </p>
                       </div>
-                      <button
-                        type='button'
-                        onClick={() => setEditingCustomer(customer)}
-                        aria-label={`Editar ${customer.name}`}
-                        className='shrink-0 text-text-muted transition-colors hover:text-clay'
-                      >
-                        <Pencil size={15} />
-                      </button>
+                      <div className='flex shrink-0 items-center gap-3'>
+                        <button
+                          type='button'
+                          onClick={() => setEditingCustomer(customer)}
+                          aria-label={`Editar ${customer.name}`}
+                          className='text-text-muted transition-colors hover:text-clay'
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type='button'
+                          onClick={() => setCustomerToDelete(customer)}
+                          aria-label={`Excluir ${customer.name}`}
+                          className='text-text-muted transition-colors hover:text-crit'
+                        >
+                          <Trash size={15} />
+                        </button>
+                      </div>
                     </div>
 
                     <div className='mt-3 border-t border-border pt-3'>
@@ -901,12 +1165,85 @@ export default function ClientesVeiculosPage() {
             </div>
           </div>
 
+          <p className='mt-6 mb-1 text-[11.5px] font-bold uppercase tracking-[0.04em] text-text-muted'>
+            Endereço (opcional)
+          </p>
+          <div className='flex items-end gap-3'>
+            <div className='flex-1'>
+              <InputMaskFormControl
+                control={createControl}
+                name='customerAddressZipCode'
+                label='CEP'
+                mask='00000-000'
+                unmask={false}
+                placeholder='00000-000'
+              />
+            </div>
+            <div className='mb-4'>
+              <Button
+                type='button'
+                onClick={handleSearchCreateAddressByZipCode}
+                disabled={isLoadingSearchCreateAddressByZipCode}
+                className='w-auto! px-4'
+              >
+                <MagnifyingGlass size={18} />
+              </Button>
+            </div>
+          </div>
+          <div className='flex gap-3'>
+            <div className='flex-3'>
+              <InputFormControl
+                control={createControl}
+                name='customerAddressStreet'
+                label='Rua'
+                placeholder='Preenchido pelo CEP'
+                disabled
+              />
+            </div>
+            <div className='flex-1'>
+              <InputFormControl
+                control={createControl}
+                name='customerAddressNumber'
+                label='Número'
+                placeholder='123'
+              />
+            </div>
+          </div>
           <InputFormControl
             control={createControl}
-            name='customerAddress'
-            label='Endereço (opcional)'
-            placeholder='Rua, número, bairro...'
+            name='customerAddressComplement'
+            label='Complemento'
+            placeholder='Sala, bloco, etc.'
           />
+          <div className='flex gap-3'>
+            <div className='flex-1'>
+              <InputFormControl
+                control={createControl}
+                name='customerAddressNeighborhood'
+                label='Bairro'
+                placeholder='Preenchido pelo CEP'
+                disabled
+              />
+            </div>
+            <div className='flex-1'>
+              <InputFormControl
+                control={createControl}
+                name='customerAddressCity'
+                label='Cidade'
+                placeholder='Preenchido pelo CEP'
+                disabled
+              />
+            </div>
+          </div>
+          <div className='w-20'>
+            <InputFormControl
+              control={createControl}
+              name='customerAddressState'
+              label='UF'
+              placeholder='UF'
+              disabled
+            />
+          </div>
 
           <p className='mt-6 mb-1 text-[11.5px] font-bold uppercase tracking-[0.04em] text-text-muted'>
             Dados do 1º veículo
@@ -1038,12 +1375,85 @@ export default function ClientesVeiculosPage() {
             placeholder='cliente@email.com'
           />
 
+          <p className='mt-6 mb-1 text-[11.5px] font-bold uppercase tracking-[0.04em] text-text-muted'>
+            Endereço (opcional)
+          </p>
+          <div className='flex items-end gap-3'>
+            <div className='flex-1'>
+              <InputMaskFormControl
+                control={editControl}
+                name='addressZipCode'
+                label='CEP'
+                mask='00000-000'
+                unmask={false}
+                placeholder='00000-000'
+              />
+            </div>
+            <div className='mb-4'>
+              <Button
+                type='button'
+                onClick={handleSearchEditAddressByZipCode}
+                disabled={isLoadingSearchEditAddressByZipCode}
+                className='w-auto! px-4'
+              >
+                <MagnifyingGlass size={18} />
+              </Button>
+            </div>
+          </div>
+          <div className='flex gap-3'>
+            <div className='flex-3'>
+              <InputFormControl
+                control={editControl}
+                name='addressStreet'
+                label='Rua'
+                placeholder='Preenchido pelo CEP'
+                disabled
+              />
+            </div>
+            <div className='flex-1'>
+              <InputFormControl
+                control={editControl}
+                name='addressNumber'
+                label='Número'
+                placeholder='123'
+              />
+            </div>
+          </div>
           <InputFormControl
             control={editControl}
-            name='address'
-            label='Endereço (opcional)'
-            placeholder='Rua, número, bairro...'
+            name='addressComplement'
+            label='Complemento'
+            placeholder='Sala, bloco, etc.'
           />
+          <div className='flex gap-3'>
+            <div className='flex-1'>
+              <InputFormControl
+                control={editControl}
+                name='addressNeighborhood'
+                label='Bairro'
+                placeholder='Preenchido pelo CEP'
+                disabled
+              />
+            </div>
+            <div className='flex-1'>
+              <InputFormControl
+                control={editControl}
+                name='addressCity'
+                label='Cidade'
+                placeholder='Preenchido pelo CEP'
+                disabled
+              />
+            </div>
+          </div>
+          <div className='w-20'>
+            <InputFormControl
+              control={editControl}
+              name='addressState'
+              label='UF'
+              placeholder='UF'
+              disabled
+            />
+          </div>
 
           <div className='mt-6'>
             <Button type='submit' disabled={isLoadingEdit}>
@@ -1147,6 +1557,27 @@ export default function ClientesVeiculosPage() {
           </div>
         </form>
       </Dialog>
+
+      {/* ===== CONFIRMAR EXCLUSÃO DE CLIENTE ===== */}
+      <AlertDialog
+        open={customerToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCustomerToDelete(null);
+          }
+        }}
+        title='Excluir cliente'
+        description={
+          customerToDelete
+            ? `Tem certeza que quer excluir ${customerToDelete.name}? Se não houver nenhuma ordem de serviço no histórico, cliente e veículos são apagados de vez. Se houver, os dados pessoais são anonimizados (o histórico de OS continua intacto).`
+            : ''
+        }
+        tone='destructive'
+        confirmLabel='Excluir'
+        confirmLoadingLabel='Excluindo...'
+        isLoading={isLoadingDelete}
+        onConfirm={handleDeleteCustomer}
+      />
     </AppShell>
   );
 }

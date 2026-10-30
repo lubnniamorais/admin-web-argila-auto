@@ -13,13 +13,37 @@ import { api } from '@/lib/apiClient';
 export interface ICustomerVehicle {
   id: string;
   customer_id: string;
-  plate: string;
+  // `null` só quando o veículo foi anonimizado junto da exclusão do
+  // cliente dono (ver `ICustomer.active` abaixo) — na prática nunca
+  // acontece nos veículos que a tela chega a mostrar, porque GET
+  // /customers só lista clientes `active` por padrão, e um cliente
+  // ativo nunca tem veículo anonimizado (ver api-argila-auto/CLAUDE.md,
+  // "Exclusão de cliente"). O tipo permite `null` mesmo assim, por
+  // fidelidade ao schema real.
+  plate: string | null;
   brand: string;
   model: string;
   year: number | null;
   color: string | null;
   chassis_number: string | null;
   current_mileage: number;
+  active: boolean;
+}
+
+// Endereço estruturado do cliente — mesmo formato de IWorkshopAddress
+// (ver hooks/workshop.ts), todos os campos opcionais. POST/PUT
+// /customers continuam recebendo os campos flat (addressStreet,
+// addressNumber...), só a resposta é que vem aninhada assim (ver
+// api-argila-auto, commit "feat: turn Customer.address into a
+// structured address", 29/10).
+export interface ICustomerAddress {
+  street: string | null;
+  number: string | null;
+  complement: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
 }
 
 // Espelha o schema Customer do openapi.yaml (api-argila-auto) — campos
@@ -29,10 +53,20 @@ export interface ICustomerVehicle {
 export interface ICustomer {
   id: string;
   name: string;
-  document: string;
+  // `null` quando o cliente foi excluído mas tinha histórico de OS
+  // (anonimizado em vez de apagado de verdade — ver `active` abaixo).
+  // Na prática não aparece na listagem padrão (GET /customers só traz
+  // `active:true` por padrão), mas o tipo reflete o schema real.
+  document: string | null;
   email: string | null;
-  phone: string;
-  address: string | null;
+  phone: string | null;
+  address: ICustomerAddress;
+  // false = cliente excluído (DELETE /customers/:id) com histórico de
+  // OS, por isso anonimizado em vez de apagado — some de GET /customers
+  // por padrão, então na prática todo ICustomer que a tela carrega tem
+  // active:true. Campo mantido no tipo por completude/fidelidade ao
+  // schema.
+  active: boolean;
   vehicles: ICustomerVehicle[];
   created_at: string;
   updated_at: string;

@@ -21,6 +21,7 @@ import {
 
 import { AppShell } from '@/components/AppShell';
 import { buttonClassName } from '@/components/Form/Button';
+import { useCustomers } from '@/hooks/customers';
 import {
   IMonthlyPaymentsReportItem,
   useLowStockParts,
@@ -128,6 +129,14 @@ export default function DashboardPage() {
   const { data: preventiveInsight } = usePreventiveMaintenanceInsight(
     Boolean(isPro)
   );
+  // Só pra saber se a oficina já tem algum cliente — não interessa o
+  // conteúdo da página, por isso perPage=1 (o mínimo que ainda devolve o
+  // header x-total-count-registers). Ver `hasAnyCustomer` abaixo: o
+  // estado vazio do Dashboard depende de CLIENTE existir, não de OS (uma
+  // oficina pode ter clientes cadastrados e ainda nenhuma OS — nesse
+  // caso o Dashboard de verdade, com KPIs zerados, é mais correto que a
+  // tela de boas-vindas, que promete "cadastre seu primeiro cliente").
+  const { data: customersCheck } = useCustomers({ page: 1, perPage: 1 });
 
   // FUNCTIONS
   const chartData = useMemo(
@@ -156,7 +165,7 @@ export default function DashboardPage() {
   const lowStockCount = lowStockParts?.length ?? 0;
   // END FUNCTIONS
 
-  const hasAnyServiceOrder = (recentServiceOrders?.totalCount ?? 0) > 0;
+  const hasAnyCustomer = (customersCheck?.totalCount ?? 0) > 0;
 
   return (
     <AppShell title='Dashboard' subtitle='Visão geral da oficina hoje'>
@@ -164,7 +173,7 @@ export default function DashboardPage() {
         <title>Dashboard | ArgilaAuto</title>
       </Head>
 
-      {recentServiceOrders && !hasAnyServiceOrder ? (
+      {customersCheck && !hasAnyCustomer ? (
         <div className='rounded-[10px] border border-border bg-surface p-10 text-center shadow-[0_1px_2px_rgba(43,36,32,0.06),0_8px_24px_-12px_rgba(43,36,32,0.14)]'>
           <h3 className='font-display text-lg font-bold'>
             Sua oficina ainda está vazia
