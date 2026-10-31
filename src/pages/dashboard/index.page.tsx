@@ -32,34 +32,14 @@ import {
 } from '@/hooks/dashboard';
 import { useWorkshop } from '@/hooks/workshop';
 import {
+  IMaintenanceCategory,
+  MAINTENANCE_CATEGORY_LABEL,
+} from '@/utils/maintenanceCategory';
+import {
   ORDER_STATUS_BADGE_CLASSNAME,
   ORDER_STATUS_LABEL,
 } from '@/utils/orderStatus';
 import { withSSRAuth } from '@/utils/withSSRAuth';
-
-// Mesmos 16 valores rastreados de `MaintenanceCategory` (todos exceto
-// `OTHER`, que nunca entra no insight — ver openapi.yaml,
-// VehiclePreventiveMaintenanceInsight). Mapa só usado aqui por enquanto;
-// se "Produtos" precisar dele mais pra frente (cadastro de peça/serviço),
-// vale extrair pra um util compartilhado nesse momento.
-const MAINTENANCE_CATEGORY_LABEL: Record<string, string> = {
-  MOTOR_OIL_CHANGE: 'Troca de óleo do motor',
-  OIL_FILTER: 'Filtro de óleo',
-  AIR_FILTER: 'Filtro de ar',
-  CABIN_AIR_FILTER: 'Filtro de cabine',
-  FUEL_FILTER: 'Filtro de combustível',
-  TIMING_BELT: 'Correia dentada',
-  ACCESSORY_BELT: 'Correia de acessórios',
-  BRAKE_PADS: 'Pastilhas de freio',
-  BRAKE_DISCS: 'Discos de freio',
-  BRAKE_FLUID: 'Fluido de freio',
-  SPARK_PLUGS: 'Velas de ignição',
-  BATTERY: 'Bateria',
-  COOLANT: 'Líquido de arrefecimento',
-  TRANSMISSION_FLUID: 'Fluido de transmissão',
-  TIRES: 'Pneus',
-  SUSPENSION: 'Suspensão',
-};
 
 function formatCurrencyBRL(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
@@ -328,8 +308,9 @@ export default function DashboardPage() {
                               {vehicle.year ? ` ${vehicle.year}` : ''}
                             </span>{' '}
                             —{' '}
-                            {MAINTENANCE_CATEGORY_LABEL[mostUrgent.category] ??
-                              mostUrgent.category}
+                            {MAINTENANCE_CATEGORY_LABEL[
+                              mostUrgent.category as IMaintenanceCategory
+                            ] ?? mostUrgent.category}
                             :{' '}
                             {mostUrgent.status === 'OVERDUE'
                               ? `atrasada${

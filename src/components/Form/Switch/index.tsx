@@ -1,20 +1,23 @@
-import * as Switch from '@radix-ui/react-switch';
-import { SwitchProps } from '@radix-ui/react-switch';
+import * as RadixSwitch from '@radix-ui/react-switch';
+import { tv } from 'tailwind-variants';
 
-type ISwitchProps = SwitchProps;
+// Reconstruído a partir do template antigo (ver CLAUDE.md, "Componentes
+// legados ainda quebrados") — cores SCREAMING_CASE (`bg-OFF_WHITE_600`,
+// `bg-LIGHT_BLUE_600`, `bg-WHITE`) trocadas pelos tokens atuais, com
+// `tv()` de verdade (decisão confirmada em 29/10, mesmo tratamento de
+// Pagination/InputMask). Export renomeado de `SwitchBase` pra `Switch` —
+// padrão de nome dos outros componentes de Form (Input, Button...).
+const switchRoot = tv({
+  base: 'relative h-6 w-11 shrink-0 cursor-pointer rounded-full bg-border-strong outline-none transition-colors focus-visible:outline-2 focus-visible:outline-clay focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-60 data-[state=checked]:bg-clay',
+});
 
-const SwitchBase = ({ ...rest }: ISwitchProps) => {
+const switchThumbClassName =
+  'block h-5 w-5 translate-x-0.5 rounded-full bg-white shadow transition-transform will-change-transform data-[state=checked]:translate-x-[22px]';
+
+export function Switch({ className, ...rest }: RadixSwitch.SwitchProps) {
   return (
-    <Switch.Root
-      className="w-11 h-6 bg-OFF_WHITE_600 rounded-full relative data-[state=checked]:bg-LIGHT_BLUE_600"
-      {...rest}
-    >
-      <Switch.Thumb
-        className="block w-4 h-4 bg-WHITE rounded-full shadow-[0 2px 2px bg-LIGHT_BLUE_600]
-       delay-100 translate-x-1 will-change-transform data-[state=checked]:translate-x-6"
-      />
-    </Switch.Root>
+    <RadixSwitch.Root className={switchRoot({ className })} {...rest}>
+      <RadixSwitch.Thumb className={switchThumbClassName} />
+    </RadixSwitch.Root>
   );
-};
-
-export { SwitchBase };
+}

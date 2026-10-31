@@ -1,87 +1,93 @@
-import * as Select from '@radix-ui/react-select';
+import * as RadixSelect from '@radix-ui/react-select';
 import { CaretDown, Check } from 'phosphor-react';
-import { SelectHTMLAttributes } from 'react';
-import { FieldError } from 'react-hook-form';
-import { tv, VariantProps } from 'tailwind-variants';
 
-const selectPicker = tv({
-  base: [
-    'w-72 h-14 flex items-center justify-between rounded-md p-3 my-2 px-4',
-    'text-base text-WHITE leading-5 bg-DARK_BLUE_900 border-2 border-DARK_BLUE_900',
-    'data-[placeholder]:text-OFF_WHITE_500',
-    'xs:w-72 sm:w-104 md:w-96 lg:w-96 xl:w-84.5 2xl:w-96.5',
-  ],
-
-  variants: {
-    isErrored: {
-      true: 'border-RED_500',
-    },
-  },
-});
-
-type SelectVariants = SelectHTMLAttributes<HTMLInputElement> &
-  VariantProps<typeof selectPicker>;
-
-interface IData {
-  // Label é o que será mostrado para o usuário, por exemplo banana, maça, uva
+// Reconstruído a partir do template antigo (ver CLAUDE.md, "Componentes
+// legados ainda quebrados") — só faltava `tailwind-variants` (já
+// instalado em 29/10) e os tokens de cor SCREAMING_CASE que não existem
+// mais (`bg-DARK_BLUE_900`, `text-WHITE`, `text-OFF_WHITE_500`,
+// `border-RED_500`...). Reescrito com os tokens atuais e o mesmo "visual
+// de input" (label acima, borda, raio) já usado em Form/Input — primeiro
+// uso de verdade do componente no projeto (ver src/pages/produtos, select
+// de `maintenanceCategory`).
+interface ISelectPickerOption {
   label: string;
   value: string;
-  // Value é o ID, boolean é o que tem no banco de dados
 }
 
-interface ISelectPickerProps extends SelectVariants {
+interface ISelectPickerProps {
+  // Precisa casar com o `id` do Trigger abaixo pra atender a regra de
+  // acessibilidade "label precisa estar associado a um controle" (Biome
+  // `noLabelWithoutControl`) — o Radix não gera um `<select>` nativo por
+  // baixo, então o `htmlFor`/`id` tem que ser escrito à mão.
+  id: string;
+  label: string;
   placeholder?: string;
-  data: IData[];
+  data: ISelectPickerOption[];
   value: string;
-  error?: FieldError;
+  error?: string;
+  disabled?: boolean;
   onValueChange: (value: string) => void;
 }
 
-const SelectPicker = ({
+export function SelectPicker({
+  id,
+  label,
   placeholder,
   data,
   value,
   error,
+  disabled,
   onValueChange,
-  ...rest
-}: ISelectPickerProps) => {
+}: ISelectPickerProps) {
   return (
-    <div className="w-full">
-      <Select.Root value={value} onValueChange={onValueChange}>
-        <Select.Trigger className={selectPicker({ isErrored: !!error })}>
-          <Select.Value placeholder={placeholder} {...rest} />
-          <Select.Icon className="text-WHITE">
-            <CaretDown size={20} />
-          </Select.Icon>
-        </Select.Trigger>
+    <div className='mt-4'>
+      <label
+        htmlFor={id}
+        className='mb-1.5 block text-[11.5px] font-bold uppercase tracking-[0.04em] text-text-muted'
+      >
+        {label}
+      </label>
 
-        <Select.Portal>
-          <Select.Content className="overflow-hidden bg-DARK_BLUE_900 rounded-md">
-            <Select.Viewport className="py-1">
-              {data.map((item) => {
-                return (
-                  <Select.Item
-                    className="h-6 flex items-center relative pr-9 pl-4 select-none 
-                    text-sm text-WHITE leading-4 rounded-md
-                   data-[disabled]:text-OFF_WHITE_500 data-[highlighted]:outline-none"
-                    key={item.value}
-                    value={item.value}
-                  >
-                    <Select.ItemText className="text-WHITE">
-                      {item.label}
-                    </Select.ItemText>
-                    <Select.ItemIndicator className="w-6 pl-3 inline-flex items-center justify-center">
-                      <Check size={20} />
-                    </Select.ItemIndicator>
-                  </Select.Item>
-                );
-              })}
-            </Select.Viewport>
-          </Select.Content>
-        </Select.Portal>
-      </Select.Root>
+      <RadixSelect.Root
+        value={value}
+        onValueChange={onValueChange}
+        disabled={disabled}
+      >
+        <RadixSelect.Trigger
+          id={id}
+          className='flex w-full items-center justify-between rounded-[9px] border border-border-strong bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:outline-2 focus:outline-clay focus:outline-offset-1 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-muted data-[placeholder]:text-text-faint'
+        >
+          <RadixSelect.Value placeholder={placeholder} />
+          <RadixSelect.Icon className='text-text-muted'>
+            <CaretDown size={16} />
+          </RadixSelect.Icon>
+        </RadixSelect.Trigger>
+
+        <RadixSelect.Portal>
+          <RadixSelect.Content
+            position='popper'
+            sideOffset={4}
+            className='z-50 overflow-hidden rounded-[9px] border border-border bg-surface shadow-[0_8px_24px_-12px_rgba(43,36,32,0.3)]'
+          >
+            <RadixSelect.Viewport className='max-h-72 p-1'>
+              {data.map((item) => (
+                <RadixSelect.Item
+                  key={item.value}
+                  value={item.value}
+                  className='relative flex h-9 cursor-pointer items-center rounded-[7px] pl-8 pr-3 text-sm text-foreground outline-none select-none data-[highlighted]:bg-surface-2'
+                >
+                  <RadixSelect.ItemIndicator className='absolute left-2 inline-flex items-center'>
+                    <Check size={15} className='text-clay' />
+                  </RadixSelect.ItemIndicator>
+                  <RadixSelect.ItemText>{item.label}</RadixSelect.ItemText>
+                </RadixSelect.Item>
+              ))}
+            </RadixSelect.Viewport>
+          </RadixSelect.Content>
+        </RadixSelect.Portal>
+      </RadixSelect.Root>
+
+      {error && <p className='mt-1.5 text-xs text-danger'>{error}</p>}
     </div>
   );
-};
-
-export { SelectPicker };
+}
