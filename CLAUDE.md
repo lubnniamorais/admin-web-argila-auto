@@ -1,6 +1,6 @@
 # ArgilaAuto — Admin (admin-argila-auto)
 
-> Atualizado em 2026-10-31 (sessão que implementou a tela `/produtos`, abas Peças/Serviços, e depois a UI de movimento de estoque manual — API ganhou `Part.active` nessa mesma janela, feito pelo usuário em paralelo, ver "Estado atual" — tudo testado no navegador). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
+> Atualizado em 2026-10-31 (sessão que implementou a tela `/produtos`, abas Peças/Serviços (`39aa5a1`), e depois a UI de movimento de estoque manual (`9c31689`) — API ganhou `Part.active` nessa mesma janela, feito pelo usuário em paralelo, ver "Estado atual" — tudo testado no navegador e commitado). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
 
 ## Como trabalhar neste projeto (combinado com o usuário)
 
@@ -279,7 +279,7 @@ src/
 
 **`/clientes-veiculos` concluída e commitada** (29/10 em `fda7b02`; endereço estruturado + CEP e exclusão de cliente adicionados e commitados em 30/10, `2c6c156`) — ver "Estado atual" acima. Testado no navegador, exceto o caminho de anonimização na exclusão (ver "Estado atual").
 
-**`/produtos` concluída e commitada** (31/10, `39aa5a1`; UI de movimento de estoque manual adicionada na mesma data, ver "Estado atual" acima — ainda não commitada) — testado no navegador de ponta a ponta, incluindo entrada por compra, ajuste de inventário (+/-), bloqueio de estoque negativo e histórico. Nada mais pendente nesta tela por enquanto.
+**`/produtos` concluída e commitada** (31/10, `39aa5a1`; UI de movimento de estoque manual adicionada e commitada na mesma data, `9c31689`, ver "Estado atual" acima) — testado no navegador de ponta a ponta, incluindo entrada por compra, ajuste de inventário (+/-), bloqueio de estoque negativo e histórico. Nada mais pendente nesta tela por enquanto.
 
 **Próxima coisa a fazer**: sem uma próxima tela óbvia já combinada — as que faltam (`/orcamentos`, `/ordens-de-servico`) pedem alinhamento de layout com o usuário antes de começar, como de costume.
 
