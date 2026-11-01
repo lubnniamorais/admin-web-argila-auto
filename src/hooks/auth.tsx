@@ -15,7 +15,7 @@ import { api } from '@/lib/apiClient';
 // Importante: os campos vêm em snake_case de verdade na resposta HTTP
 // (ex.: "workshop_id", "avatar_url"), não é um typo — por isso o tipo
 // também fica em snake_case aqui, pra não precisar converter nada na mão.
-interface IUser {
+export interface IUser {
   id: string;
   workshop_id: string | null; // só null pra SUPER_ADMIN, que não pertence a nenhuma workshop
   name: string;

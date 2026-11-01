@@ -10,6 +10,8 @@ import {
   Users,
 } from 'phosphor-react';
 
+import { usePermissions } from '@/utils/permissions';
+
 interface NavItem {
   label: string;
   href: string;
@@ -81,10 +83,23 @@ const NAV_ITEM_LABEL_CLASSNAME = 'max-[880px]:hidden';
  */
 export function Menubar() {
   const router = useRouter();
+  const { canEditWorkshop, canViewFinancials } = usePermissions();
+
+  // "Configurações" não tem nada pra um MECHANIC ver (dados da oficina e
+  // plano/assinatura são ADMIN only, relatório financeiro é
+  // ADMIN/RECEPTIONIST only — ver src/utils/permissions.ts) — some da
+  // navegação pra esse papel, em vez de levar pra uma página vazia.
+  const navGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter(
+      (item) =>
+        item.href !== '/configuracoes' || canEditWorkshop || canViewFinancials
+    ),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <nav className='flex flex-1 flex-col gap-0.5 overflow-y-auto'>
-      {NAV_GROUPS.map((group) => (
+      {navGroups.map((group) => (
         <div key={group.label}>
           <div className={NAV_LABEL_CLASSNAME}>{group.label}</div>
 

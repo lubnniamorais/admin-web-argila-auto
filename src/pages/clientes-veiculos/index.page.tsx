@@ -17,6 +17,7 @@ import { InputMaskFormControl } from '@/components/Form/InputMaskFormControl';
 import { Pagination } from '@/components/Pagination';
 import { ICustomer, ICustomerVehicle, useCustomers } from '@/hooks/customers';
 import { api } from '@/lib/apiClient';
+import { usePermissions } from '@/utils/permissions';
 import { validateDocument } from '@/utils/validateDocument';
 import { withSSRAuth } from '@/utils/withSSRAuth';
 
@@ -242,12 +243,14 @@ function formatPhone(phone: string | null): string {
 // etc.), pra não precisar virar parte do componente principal.
 interface ICustomerVehiclesListProps {
   customer: ICustomer;
+  canManageCustomers: boolean;
   onEditVehicle: (vehicle: ICustomerVehicle) => void;
   onAddVehicle: () => void;
 }
 
 function CustomerVehiclesList({
   customer,
+  canManageCustomers,
   onEditVehicle,
   onAddVehicle,
 }: ICustomerVehiclesListProps) {
@@ -266,27 +269,31 @@ function CustomerVehiclesList({
                 {vehicle.brand} {vehicle.model} ·{' '}
                 {vehicle.current_mileage.toLocaleString('pt-BR')} km
               </span>
-              <button
-                type='button'
-                onClick={() => onEditVehicle(vehicle)}
-                aria-label={`Editar ${vehicle.plate}`}
-                className='text-text-muted transition-colors hover:text-clay'
-              >
-                <Pencil size={13} />
-              </button>
+              {canManageCustomers && (
+                <button
+                  type='button'
+                  onClick={() => onEditVehicle(vehicle)}
+                  aria-label={`Editar ${vehicle.plate}`}
+                  className='text-text-muted transition-colors hover:text-clay'
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      <button
-        type='button'
-        onClick={onAddVehicle}
-        className='mt-1.5 inline-flex items-center gap-1 text-[12.5px] font-semibold text-clay hover:underline'
-      >
-        <Plus size={13} />
-        Adicionar veículo
-      </button>
+      {canManageCustomers && (
+        <button
+          type='button'
+          onClick={onAddVehicle}
+          className='mt-1.5 inline-flex items-center gap-1 text-[12.5px] font-semibold text-clay hover:underline'
+        >
+          <Plus size={13} />
+          Adicionar veículo
+        </button>
+      )}
     </div>
   );
 }
@@ -294,6 +301,7 @@ function CustomerVehiclesList({
 
 export default function ClientesVeiculosPage() {
   const queryClient = useQueryClient();
+  const { canManageCustomers, canDeleteCustomer } = usePermissions();
 
   // FUNCTIONS
   const [page, setPage] = useState(1);
@@ -890,16 +898,18 @@ export default function ClientesVeiculosPage() {
             Cadastre o primeiro cliente da sua oficina pra começar a criar
             ordens de serviço.
           </p>
-          <button
-            type='button'
-            onClick={() => setIsCreateModalOpen(true)}
-            className={`mt-5 inline-flex ${buttonClassName('primary', 'w-auto px-5')}`}
-          >
-            <span className='inline-flex items-center gap-2'>
-              <UserPlus size={18} />
-              Cadastrar cliente
-            </span>
-          </button>
+          {canManageCustomers && (
+            <button
+              type='button'
+              onClick={() => setIsCreateModalOpen(true)}
+              className={`mt-5 inline-flex ${buttonClassName('primary', 'w-auto px-5')}`}
+            >
+              <span className='inline-flex items-center gap-2'>
+                <UserPlus size={18} />
+                Cadastrar cliente
+              </span>
+            </button>
+          )}
         </div>
       ) : (
         <div className='rounded-[10px] border border-border bg-surface p-5'>
@@ -919,16 +929,18 @@ export default function ClientesVeiculosPage() {
               />
             </div>
 
-            <button
-              type='button'
-              onClick={() => setIsCreateModalOpen(true)}
-              className={buttonClassName('primary', 'w-auto px-5')}
-            >
-              <span className='inline-flex items-center gap-2'>
-                <UserPlus size={18} />
-                Cadastrar cliente
-              </span>
-            </button>
+            {canManageCustomers && (
+              <button
+                type='button'
+                onClick={() => setIsCreateModalOpen(true)}
+                className={buttonClassName('primary', 'w-auto px-5')}
+              >
+                <span className='inline-flex items-center gap-2'>
+                  <UserPlus size={18} />
+                  Cadastrar cliente
+                </span>
+              </button>
+            )}
           </div>
 
           {!data || data.customers.length === 0 ? (
@@ -979,6 +991,7 @@ export default function ClientesVeiculosPage() {
                         <td className='py-2.5 pr-3'>
                           <CustomerVehiclesList
                             customer={customer}
+                            canManageCustomers={canManageCustomers}
                             onEditVehicle={(vehicle) =>
                               setVehicleModal({
                                 mode: 'edit',
@@ -997,22 +1010,26 @@ export default function ClientesVeiculosPage() {
                         </td>
                         <td className='py-2.5'>
                           <div className='flex items-center gap-3'>
-                            <button
-                              type='button'
-                              onClick={() => setEditingCustomer(customer)}
-                              aria-label={`Editar ${customer.name}`}
-                              className='text-text-muted transition-colors hover:text-clay'
-                            >
-                              <Pencil size={15} />
-                            </button>
-                            <button
-                              type='button'
-                              onClick={() => setCustomerToDelete(customer)}
-                              aria-label={`Excluir ${customer.name}`}
-                              className='text-text-muted transition-colors hover:text-crit'
-                            >
-                              <Trash size={15} />
-                            </button>
+                            {canManageCustomers && (
+                              <button
+                                type='button'
+                                onClick={() => setEditingCustomer(customer)}
+                                aria-label={`Editar ${customer.name}`}
+                                className='text-text-muted transition-colors hover:text-clay'
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            )}
+                            {canDeleteCustomer && (
+                              <button
+                                type='button'
+                                onClick={() => setCustomerToDelete(customer)}
+                                aria-label={`Excluir ${customer.name}`}
+                                className='text-text-muted transition-colors hover:text-crit'
+                              >
+                                <Trash size={15} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1043,22 +1060,26 @@ export default function ClientesVeiculosPage() {
                         </p>
                       </div>
                       <div className='flex shrink-0 items-center gap-3'>
-                        <button
-                          type='button'
-                          onClick={() => setEditingCustomer(customer)}
-                          aria-label={`Editar ${customer.name}`}
-                          className='text-text-muted transition-colors hover:text-clay'
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          type='button'
-                          onClick={() => setCustomerToDelete(customer)}
-                          aria-label={`Excluir ${customer.name}`}
-                          className='text-text-muted transition-colors hover:text-crit'
-                        >
-                          <Trash size={15} />
-                        </button>
+                        {canManageCustomers && (
+                          <button
+                            type='button'
+                            onClick={() => setEditingCustomer(customer)}
+                            aria-label={`Editar ${customer.name}`}
+                            className='text-text-muted transition-colors hover:text-clay'
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        )}
+                        {canDeleteCustomer && (
+                          <button
+                            type='button'
+                            onClick={() => setCustomerToDelete(customer)}
+                            aria-label={`Excluir ${customer.name}`}
+                            className='text-text-muted transition-colors hover:text-crit'
+                          >
+                            <Trash size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -1068,6 +1089,7 @@ export default function ClientesVeiculosPage() {
                       </p>
                       <CustomerVehiclesList
                         customer={customer}
+                        canManageCustomers={canManageCustomers}
                         onEditVehicle={(vehicle) =>
                           setVehicleModal({
                             mode: 'edit',

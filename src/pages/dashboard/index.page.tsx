@@ -39,6 +39,7 @@ import {
   ORDER_STATUS_BADGE_CLASSNAME,
   ORDER_STATUS_LABEL,
 } from '@/utils/orderStatus';
+import { usePermissions } from '@/utils/permissions';
 import { withSSRAuth } from '@/utils/withSSRAuth';
 
 function formatCurrencyBRL(value: number): string {
@@ -101,10 +102,14 @@ function KpiCard({ label, value, delta, deltaTone }: IKpiCardProps) {
 export default function DashboardPage() {
   const { data: workshop } = useWorkshop();
   const isPro = workshop?.subscription.plan === 'PRO';
+  const { canViewFinancials } = usePermissions();
 
-  const { data: summary } = useServiceOrdersSummary();
+  const { data: summary } = useServiceOrdersSummary(canViewFinancials);
   const { data: lowStockParts } = useLowStockParts();
-  const { data: monthlyReport } = useMonthlyPaymentsReport(6);
+  const { data: monthlyReport } = useMonthlyPaymentsReport(
+    6,
+    canViewFinancials
+  );
   const { data: recentServiceOrders } = useRecentServiceOrders(5);
   const { data: preventiveInsight } = usePreventiveMaintenanceInsight(
     Boolean(isPro)
@@ -171,48 +176,61 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* ===== KPIs ===== */}
+          {/* ===== KPIs =====
+              "OS em aberto"/"Faturamento do mês"/"Ticket médio" embutem
+              dado financeiro (GET /service-orders/summary e
+              /service-order-payments/monthly-report) — API bloqueia
+              MECHANIC com 403 nos dois, então somem pra esse papel (ver
+              usePermissions().canViewFinancials). "Peças em estoque
+              baixo" fica pra todo mundo — GET /parts/low-stock não tem
+              essa restrição. */}
           <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-            <KpiCard
-              label='OS em aberto'
-              value={summary?.open_orders_count ?? '—'}
-              delta={`de ${recentServiceOrders?.totalCount ?? '—'} no total`}
-              deltaTone='muted'
-            />
-            <KpiCard
-              label='Faturamento do mês'
-              value={formatCurrencyBRL(currentMonthRevenue)}
-              delta={
-                revenueVariationPercent === null ? (
-                  'sem comparativo ainda'
-                ) : (
-                  <span className='inline-flex items-center gap-1'>
-                    {revenueVariationPercent >= 0 ? (
-                      <TrendUp size={13} weight='bold' />
-                    ) : (
-                      <TrendDown size={13} weight='bold' />
-                    )}
-                    {Math.abs(revenueVariationPercent).toFixed(1)}% vs. mês
-                    anterior
-                  </span>
-                )
-              }
-              deltaTone={
-                revenueVariationPercent === null
-                  ? 'muted'
-                  : revenueVariationPercent >= 0
-                    ? 'up'
-                    : 'down'
-              }
-            />
-            <KpiCard
-              label='Ticket médio'
-              value={formatCurrencyBRL(
-                summary?.current_month_average_ticket ?? 0
-              )}
-              delta='por ordem de serviço'
-              deltaTone='muted'
-            />
+            {canViewFinancials && (
+              <KpiCard
+                label='OS em aberto'
+                value={summary?.open_orders_count ?? '—'}
+                delta={`de ${recentServiceOrders?.totalCount ?? '—'} no total`}
+                deltaTone='muted'
+              />
+            )}
+            {canViewFinancials && (
+              <KpiCard
+                label='Faturamento do mês'
+                value={formatCurrencyBRL(currentMonthRevenue)}
+                delta={
+                  revenueVariationPercent === null ? (
+                    'sem comparativo ainda'
+                  ) : (
+                    <span className='inline-flex items-center gap-1'>
+                      {revenueVariationPercent >= 0 ? (
+                        <TrendUp size={13} weight='bold' />
+                      ) : (
+                        <TrendDown size={13} weight='bold' />
+                      )}
+                      {Math.abs(revenueVariationPercent).toFixed(1)}% vs. mês
+                      anterior
+                    </span>
+                  )
+                }
+                deltaTone={
+                  revenueVariationPercent === null
+                    ? 'muted'
+                    : revenueVariationPercent >= 0
+                      ? 'up'
+                      : 'down'
+                }
+              />
+            )}
+            {canViewFinancials && (
+              <KpiCard
+                label='Ticket médio'
+                value={formatCurrencyBRL(
+                  summary?.current_month_average_ticket ?? 0
+                )}
+                delta='por ordem de serviço'
+                deltaTone='muted'
+              />
+            )}
             <KpiCard
               label='Peças em estoque baixo'
               value={lowStockCount}
@@ -228,54 +246,62 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* ===== GRÁFICO + INSIGHTS IA ===== */}
-          <div className='mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2'>
-            <div className='rounded-[10px] border border-border bg-surface p-5'>
-              <h3 className='font-display text-[15px] font-bold'>
-                Faturamento — últimos 6 meses
-              </h3>
-              <div className='mt-4 h-55'>
-                <ResponsiveContainer width='100%' height='100%'>
-                  <BarChart data={chartData}>
-                    <CartesianGrid
-                      strokeDasharray='3 3'
-                      stroke='var(--border)'
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey='month'
-                      stroke='var(--text-muted)'
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke='var(--text-muted)'
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={formatCompactNumber}
-                      width={40}
-                    />
-                    <Tooltip
-                      cursor={{ fill: 'var(--surface-2)' }}
-                      contentStyle={{
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 8,
-                        fontSize: 13,
-                      }}
-                      formatter={(value) => formatCurrencyBRL(Number(value))}
-                    />
-                    <Bar
-                      dataKey='total'
-                      fill='var(--clay)'
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+          {/* ===== GRÁFICO + INSIGHTS IA =====
+              Gráfico de faturamento usa o mesmo endpoint financeiro
+              bloqueado pra MECHANIC (ver comentário acima) — some pra
+              esse papel, e a grid vira 1 coluna só (o card de Insights
+              ocupa a largura inteira em vez de sobrar espaço vazio). */}
+          <div
+            className={`mt-5 grid grid-cols-1 gap-4 ${canViewFinancials ? 'lg:grid-cols-2' : ''}`}
+          >
+            {canViewFinancials && (
+              <div className='rounded-[10px] border border-border bg-surface p-5'>
+                <h3 className='font-display text-[15px] font-bold'>
+                  Faturamento — últimos 6 meses
+                </h3>
+                <div className='mt-4 h-55'>
+                  <ResponsiveContainer width='100%' height='100%'>
+                    <BarChart data={chartData}>
+                      <CartesianGrid
+                        strokeDasharray='3 3'
+                        stroke='var(--border)'
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey='month'
+                        stroke='var(--text-muted)'
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        stroke='var(--text-muted)'
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={formatCompactNumber}
+                        width={40}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'var(--surface-2)' }}
+                        contentStyle={{
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 8,
+                          fontSize: 13,
+                        }}
+                        formatter={(value) => formatCurrencyBRL(Number(value))}
+                      />
+                      <Bar
+                        dataKey='total'
+                        fill='var(--clay)'
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-            </div>
+            )}
 
             {isPro ? (
               <div className='rounded-[10px] border border-border bg-surface p-5'>

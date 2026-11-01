@@ -5,13 +5,16 @@ import { IOrderStatus } from '@/utils/orderStatus';
 
 // Espelha GET /service-orders/summary (ADMIN/RECEPTIONIST only — ver
 // openapi.yaml, api-argila-auto). Corpo da resposta é o próprio objeto,
-// sem chave de envelope.
+// sem chave de envelope. `enabled` controla a chamada pra nunca disparar
+// pra um usuário MECHANIC, que daria 403 (mesmo racional de `enabled` em
+// usePreventiveMaintenanceInsight, mas por papel em vez de plano — ver
+// uso em dashboard/index.page.tsx, usePermissions().canViewFinancials).
 export interface IServiceOrdersSummary {
   open_orders_count: number;
   current_month_average_ticket: number;
 }
 
-export function useServiceOrdersSummary() {
+export function useServiceOrdersSummary(enabled: boolean) {
   return useQuery({
     queryKey: ['service-orders', 'summary'],
     queryFn: async (): Promise<IServiceOrdersSummary> => {
@@ -19,6 +22,7 @@ export function useServiceOrdersSummary() {
 
       return response.data;
     },
+    enabled,
   });
 }
 
@@ -42,13 +46,15 @@ export function useLowStockParts() {
 }
 
 // Espelha GET /service-order-payments/monthly-report?months= — sempre um
-// item por mês (zero-fill), do mais antigo pro mais recente.
+// item por mês (zero-fill), do mais antigo pro mais recente. Mesmo papel
+// permitido de useServiceOrdersSummary (ADMIN/RECEPTIONIST only) — mesmo
+// uso de `enabled` pra nunca disparar pra MECHANIC.
 export interface IMonthlyPaymentsReportItem {
   month: string;
   total_received: number;
 }
 
-export function useMonthlyPaymentsReport(months = 6) {
+export function useMonthlyPaymentsReport(months = 6, enabled: boolean) {
   return useQuery({
     queryKey: ['service-order-payments', 'monthly-report', months],
     queryFn: async (): Promise<IMonthlyPaymentsReportItem[]> => {
@@ -58,6 +64,7 @@ export function useMonthlyPaymentsReport(months = 6) {
 
       return response.data.months;
     },
+    enabled,
   });
 }
 

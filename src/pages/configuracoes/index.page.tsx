@@ -24,6 +24,7 @@ import {
   rowsTable,
   tableContent,
 } from '@/report/table';
+import { usePermissions } from '@/utils/permissions';
 import { validateCNPJ } from '@/utils/validateCNPJ';
 import { withSSRAuth } from '@/utils/withSSRAuth';
 
@@ -161,6 +162,7 @@ function formatCurrencyBRL(value: number): string {
 export default function ConfiguracoesPage() {
   const queryClient = useQueryClient();
   const { data: workshop } = useWorkshop();
+  const { canEditWorkshop, canViewFinancials } = usePermissions();
 
   const isPro = workshop?.subscription.plan === 'PRO';
   // Cancelamento em andamento (Pro até grace_period_ends_at, mas já
@@ -576,334 +578,366 @@ export default function ConfiguracoesPage() {
       title='Configurações'
       subtitle='Dados da oficina, plano e relatório financeiro'
     >
-      {/* ===== SEÇÃO 1: DADOS DA OFICINA ===== */}
-      <section className='rounded-[10px] border border-border bg-surface p-6'>
-        <h2 className='font-display text-lg font-bold'>Dados da oficina</h2>
-        <p className='mt-1 text-[13px] text-text-muted'>
-          {workshop?.cnpj
-            ? 'CNPJ não pode ser alterado depois de preenchido.'
-            : 'CNPJ ainda não informado — pode ser preenchido agora, mas não poderá ser alterado depois.'}
-        </p>
+      {/* Edição de dados da oficina e gestão de assinatura são ação de
+          ADMIN só (PUT /workshops e as 3 rotas de autogestão da
+          assinatura bloqueiam RECEPTIONIST/MECHANIC com 403, confirmado
+          lendo api-argila-auto) — as 2 seções somem pra quem não é ADMIN,
+          em vez de mostrar um formulário que ia dar erro ao salvar. */}
+      {canEditWorkshop && (
+        <>
+          {/* ===== SEÇÃO 1: DADOS DA OFICINA ===== */}
+          <section className='rounded-[10px] border border-border bg-surface p-6'>
+            <h2 className='font-display text-lg font-bold'>Dados da oficina</h2>
+            <p className='mt-1 text-[13px] text-text-muted'>
+              {workshop?.cnpj
+                ? 'CNPJ não pode ser alterado depois de preenchido.'
+                : 'CNPJ ainda não informado — pode ser preenchido agora, mas não poderá ser alterado depois.'}
+            </p>
 
-        <form
-          onSubmit={handleSubmit(handleUpdateWorkshop)}
-          noValidate
-          className='mt-5 max-w-2xl'
-        >
-          <InputFormControl
-            control={control}
-            name='name'
-            label='Nome da oficina'
-            placeholder='Ex: Oficina do João'
-          />
+            <form
+              onSubmit={handleSubmit(handleUpdateWorkshop)}
+              noValidate
+              className='mt-5 max-w-2xl'
+            >
+              <InputFormControl
+                control={control}
+                name='name'
+                label='Nome da oficina'
+                placeholder='Ex: Oficina do João'
+              />
 
-          {/* Campo âncora com regra "preenche uma vez, nunca mais muda"
+              {/* Campo âncora com regra "preenche uma vez, nunca mais muda"
               (ver openapi.yaml, PUT /workshops) — diferente de
               sku/document/plate (sempre disabled, não dá nem pra
               preencher depois), aqui o campo nasce editável enquanto a
               oficina não tem CNPJ nenhum, e vira `disabled` assim que
               um valor é salvo. Mesma máscara do Signup
               (InputMaskFormControl, unmask padrão → só dígitos). */}
-          {workshop?.cnpj ? (
-            <div className='mt-4'>
-              <label
-                htmlFor='workshop-cnpj'
-                className='mb-1.5 block text-[11.5px] font-bold uppercase tracking-[0.04em] text-text-muted'
-              >
-                CNPJ
-              </label>
-              <input
-                id='workshop-cnpj'
-                value={workshop.cnpj}
-                disabled
-                className='w-full rounded-[9px] border border-border-strong bg-surface-2 px-3.5 py-2.5 text-sm text-text-muted outline-none'
-              />
-            </div>
-          ) : (
-            <InputMaskFormControl
-              control={control}
-              name='cnpj'
-              label='CNPJ (opcional)'
-              mask='00.000.000/0000-00'
-              placeholder='00.000.000/0001-00'
-            />
-          )}
+              {workshop?.cnpj ? (
+                <div className='mt-4'>
+                  <label
+                    htmlFor='workshop-cnpj'
+                    className='mb-1.5 block text-[11.5px] font-bold uppercase tracking-[0.04em] text-text-muted'
+                  >
+                    CNPJ
+                  </label>
+                  <input
+                    id='workshop-cnpj'
+                    value={workshop.cnpj}
+                    disabled
+                    className='w-full rounded-[9px] border border-border-strong bg-surface-2 px-3.5 py-2.5 text-sm text-text-muted outline-none'
+                  />
+                </div>
+              ) : (
+                <InputMaskFormControl
+                  control={control}
+                  name='cnpj'
+                  label='CNPJ (opcional)'
+                  mask='00.000.000/0000-00'
+                  placeholder='00.000.000/0001-00'
+                />
+              )}
 
-          <div className='flex gap-3'>
-            <div className='flex-1'>
-              <InputMaskFormControl
-                control={control}
-                name='phone'
-                label='Telefone'
-                mask='(00) 00000-0000'
-                placeholder='(11) 99999-9999'
-              />
-            </div>
-            <div className='flex-1'>
+              <div className='flex gap-3'>
+                <div className='flex-1'>
+                  <InputMaskFormControl
+                    control={control}
+                    name='phone'
+                    label='Telefone'
+                    mask='(00) 00000-0000'
+                    placeholder='(11) 99999-9999'
+                  />
+                </div>
+                <div className='flex-1'>
+                  <InputFormControl
+                    control={control}
+                    name='email'
+                    label='E-mail'
+                    type='email'
+                    placeholder='contato@suaoficina.com.br'
+                  />
+                </div>
+              </div>
+
               <InputFormControl
                 control={control}
-                name='email'
-                label='E-mail'
-                type='email'
-                placeholder='contato@suaoficina.com.br'
+                name='logoUrl'
+                label='URL da logo (opcional)'
+                placeholder='https://...'
               />
-            </div>
-          </div>
 
-          <InputFormControl
-            control={control}
-            name='logoUrl'
-            label='URL da logo (opcional)'
-            placeholder='https://...'
-          />
-
-          <p className='mt-6 mb-1 text-[11.5px] font-bold uppercase tracking-[0.04em] text-text-muted'>
-            Endereço
-          </p>
-          <div className='flex items-end gap-3'>
-            <div className='flex-1'>
-              <InputMaskFormControl
-                control={control}
-                name='addressZipCode'
-                label='CEP'
-                mask='00000-000'
-                unmask={false}
-                placeholder='00000-000'
-              />
-            </div>
-            <div className='mb-4'>
-              <Button
-                type='button'
-                onClick={handleSearchAddressByZipCode}
-                disabled={isLoadingSearchAddressByZipCode}
-                className='w-auto! px-4'
-              >
-                <MagnifyingGlass size={18} />
-              </Button>
-            </div>
-          </div>
-          <div className='flex gap-3'>
-            <div className='flex-3'>
+              <p className='mt-6 mb-1 text-[11.5px] font-bold uppercase tracking-[0.04em] text-text-muted'>
+                Endereço
+              </p>
+              <div className='flex items-end gap-3'>
+                <div className='flex-1'>
+                  <InputMaskFormControl
+                    control={control}
+                    name='addressZipCode'
+                    label='CEP'
+                    mask='00000-000'
+                    unmask={false}
+                    placeholder='00000-000'
+                  />
+                </div>
+                <div className='mb-4'>
+                  <Button
+                    type='button'
+                    onClick={handleSearchAddressByZipCode}
+                    disabled={isLoadingSearchAddressByZipCode}
+                    className='w-auto! px-4'
+                  >
+                    <MagnifyingGlass size={18} />
+                  </Button>
+                </div>
+              </div>
+              <div className='flex gap-3'>
+                <div className='flex-3'>
+                  <InputFormControl
+                    control={control}
+                    name='addressStreet'
+                    label='Rua'
+                    placeholder='Preenchido pelo CEP'
+                    disabled
+                  />
+                </div>
+                <div className='flex-1'>
+                  <InputFormControl
+                    control={control}
+                    name='addressNumber'
+                    label='Número'
+                    placeholder='123'
+                  />
+                </div>
+              </div>
               <InputFormControl
                 control={control}
-                name='addressStreet'
-                label='Rua'
-                placeholder='Preenchido pelo CEP'
-                disabled
+                name='addressComplement'
+                label='Complemento'
+                placeholder='Sala, bloco, etc.'
               />
-            </div>
-            <div className='flex-1'>
-              <InputFormControl
-                control={control}
-                name='addressNumber'
-                label='Número'
-                placeholder='123'
-              />
-            </div>
-          </div>
-          <InputFormControl
-            control={control}
-            name='addressComplement'
-            label='Complemento'
-            placeholder='Sala, bloco, etc.'
-          />
-          <div className='flex gap-3'>
-            <div className='flex-1'>
-              <InputFormControl
-                control={control}
-                name='addressNeighborhood'
-                label='Bairro'
-                placeholder='Preenchido pelo CEP'
-                disabled
-              />
-            </div>
-            <div className='flex-1'>
-              <InputFormControl
-                control={control}
-                name='addressCity'
-                label='Cidade'
-                placeholder='Preenchido pelo CEP'
-                disabled
-              />
-            </div>
-          </div>
-          <div className='w-20'>
-            <InputFormControl
-              control={control}
-              name='addressState'
-              label='UF'
-              placeholder='UF'
-              disabled
-            />
-          </div>
+              <div className='flex gap-3'>
+                <div className='flex-1'>
+                  <InputFormControl
+                    control={control}
+                    name='addressNeighborhood'
+                    label='Bairro'
+                    placeholder='Preenchido pelo CEP'
+                    disabled
+                  />
+                </div>
+                <div className='flex-1'>
+                  <InputFormControl
+                    control={control}
+                    name='addressCity'
+                    label='Cidade'
+                    placeholder='Preenchido pelo CEP'
+                    disabled
+                  />
+                </div>
+              </div>
+              <div className='w-20'>
+                <InputFormControl
+                  control={control}
+                  name='addressState'
+                  label='UF'
+                  placeholder='UF'
+                  disabled
+                />
+              </div>
 
-          <div className='mt-5 max-w-xs'>
-            <Button type='submit' disabled={isLoadingUpdate || !workshop}>
-              <span className='inline-flex items-center justify-center gap-2'>
-                <FloppyDisk size={18} />
-                {isLoadingUpdate ? 'Salvando...' : 'Salvar dados'}
-              </span>
-            </Button>
-          </div>
-        </form>
-      </section>
+              <div className='mt-5 max-w-xs'>
+                <Button type='submit' disabled={isLoadingUpdate || !workshop}>
+                  <span className='inline-flex items-center justify-center gap-2'>
+                    <FloppyDisk size={18} />
+                    {isLoadingUpdate ? 'Salvando...' : 'Salvar dados'}
+                  </span>
+                </Button>
+              </div>
+            </form>
+          </section>
 
-      {/* ===== SEÇÃO 2: PLANO E ASSINATURA ===== */}
-      <section className='mt-6 rounded-[10px] border border-border bg-surface p-6'>
-        <h2 className='font-display text-lg font-bold'>Plano e assinatura</h2>
+          {/* ===== SEÇÃO 2: PLANO E ASSINATURA ===== */}
+          <section className='mt-6 rounded-[10px] border border-border bg-surface p-6'>
+            <h2 className='font-display text-lg font-bold'>
+              Plano e assinatura
+            </h2>
 
-        {!workshop ? (
-          <p className='mt-2 text-[13px] text-text-muted'>Carregando...</p>
-        ) : (
-          <div className='mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
-            <div>
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-extrabold uppercase tracking-wide ${
-                  isPro
-                    ? 'bg-clay-soft text-clay-deep'
-                    : 'bg-steel-soft text-steel'
-                }`}
-              >
-                {isPro && <Sparkle size={13} weight='fill' />}
-                {isPro ? 'Pro' : 'Básico'}
-              </span>
+            {!workshop ? (
+              <p className='mt-2 text-[13px] text-text-muted'>Carregando...</p>
+            ) : (
+              <div className='mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
+                <div>
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-extrabold uppercase tracking-wide ${
+                      isPro
+                        ? 'bg-clay-soft text-clay-deep'
+                        : 'bg-steel-soft text-steel'
+                    }`}
+                  >
+                    {isPro && <Sparkle size={13} weight='fill' />}
+                    {isPro ? 'Pro' : 'Básico'}
+                  </span>
 
-              {/* Mensagem de status muda conforme o estado real da
+                  {/* Mensagem de status muda conforme o estado real da
                   assinatura (ver workshop.subscription no openapi.yaml):
                   Pro com cancelamento pendente, Pro ativo, Básico pago,
                   ou ainda em teste grátis. */}
-              <p className='mt-2 text-[13px] text-text-muted'>
-                {isPro && hasPendingCancellation && (
-                  <>
-                    Cancelamento em andamento — continua Pro até{' '}
-                    {format(
-                      new Date(workshop.subscription.grace_period_ends_at!),
-                      'DD/MM/YYYY',
-                      'pt-BR'
+                  <p className='mt-2 text-[13px] text-text-muted'>
+                    {isPro && hasPendingCancellation && (
+                      <>
+                        Cancelamento em andamento — continua Pro até{' '}
+                        {format(
+                          new Date(workshop.subscription.grace_period_ends_at!),
+                          'DD/MM/YYYY',
+                          'pt-BR'
+                        )}
+                        .
+                      </>
                     )}
-                    .
-                  </>
-                )}
-                {isPro &&
-                  !hasPendingCancellation &&
-                  workshop.subscription.renews_at && (
-                    <>
-                      Renova em{' '}
-                      {format(
-                        new Date(workshop.subscription.renews_at),
-                        'DD/MM/YYYY',
-                        'pt-BR'
+                    {isPro &&
+                      !hasPendingCancellation &&
+                      workshop.subscription.renews_at && (
+                        <>
+                          Renova em{' '}
+                          {format(
+                            new Date(workshop.subscription.renews_at),
+                            'DD/MM/YYYY',
+                            'pt-BR'
+                          )}
+                          .
+                        </>
                       )}
-                      .
-                    </>
+                    {!isPro &&
+                      isPayingBasic &&
+                      workshop.subscription.renews_at && (
+                        <>
+                          Renova em{' '}
+                          {format(
+                            new Date(workshop.subscription.renews_at),
+                            'DD/MM/YYYY',
+                            'pt-BR'
+                          )}
+                          .
+                        </>
+                      )}
+                    {!isPro && !isPayingBasic && (
+                      <>
+                        Teste grátis até{' '}
+                        {format(
+                          new Date(workshop.subscription.trial_ends_at),
+                          'DD/MM/YYYY',
+                          'pt-BR'
+                        )}
+                        {workshop.subscription.blocked && ' — acesso bloqueado'}
+                        .
+                      </>
+                    )}
+                  </p>
+                </div>
+
+                <div className='flex flex-wrap gap-3'>
+                  {!isPro && (
+                    <div className='w-44'>
+                      <Button
+                        variant='ghost'
+                        onClick={handleSubscribeToBasic}
+                        disabled={isLoadingSubscribe || isPayingBasic}
+                      >
+                        {isLoadingSubscribe ? 'Abrindo...' : 'Assinar Básico'}
+                      </Button>
+                    </div>
                   )}
-                {!isPro && isPayingBasic && workshop.subscription.renews_at && (
-                  <>
-                    Renova em{' '}
-                    {format(
-                      new Date(workshop.subscription.renews_at),
-                      'DD/MM/YYYY',
-                      'pt-BR'
-                    )}
-                    .
-                  </>
-                )}
-                {!isPro && !isPayingBasic && (
-                  <>
-                    Teste grátis até{' '}
-                    {format(
-                      new Date(workshop.subscription.trial_ends_at),
-                      'DD/MM/YYYY',
-                      'pt-BR'
-                    )}
-                    {workshop.subscription.blocked && ' — acesso bloqueado'}.
-                  </>
-                )}
-              </p>
+
+                  {!isPro && (
+                    <div className='w-44'>
+                      <Button
+                        onClick={handleUpgradeToPro}
+                        disabled={isLoadingUpgrade}
+                      >
+                        <span className='inline-flex items-center justify-center gap-2'>
+                          <Sparkle size={16} />
+                          {isLoadingUpgrade ? 'Abrindo...' : 'Virar Pro'}
+                        </span>
+                      </Button>
+                    </div>
+                  )}
+
+                  {isPro && !hasPendingCancellation && (
+                    <div className='w-48'>
+                      <Button
+                        variant='ghost'
+                        onClick={handleCancelSubscription}
+                        disabled={isLoadingCancel}
+                      >
+                        {isLoadingCancel
+                          ? 'Cancelando...'
+                          : 'Cancelar assinatura'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {/* Relatório financeiro (GET /service-order-payments/report) é
+          ADMIN/RECEPTIONIST — MECHANIC toma 403, confirmado na API. */}
+      {canViewFinancials && (
+        <section className='mt-6 rounded-[10px] border border-border bg-surface p-6'>
+          <h2 className='font-display text-lg font-bold'>
+            Relatório financeiro
+          </h2>
+          <p className='mt-1 text-[13px] text-text-muted'>
+            Gera um PDF com todos os pagamentos confirmados no período (exclui
+            pendentes, lista estornados fora do total).
+          </p>
+
+          <form
+            onSubmit={handleReportSubmit(handleGenerateReport)}
+            noValidate
+            className='mt-4 flex flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-end'
+          >
+            <div className='w-full sm:w-52'>
+              <InputFormControl
+                control={reportControl}
+                name='from'
+                label='De'
+                type='date'
+              />
             </div>
-
-            <div className='flex flex-wrap gap-3'>
-              {!isPro && (
-                <div className='w-44'>
-                  <Button
-                    variant='ghost'
-                    onClick={handleSubscribeToBasic}
-                    disabled={isLoadingSubscribe || isPayingBasic}
-                  >
-                    {isLoadingSubscribe ? 'Abrindo...' : 'Assinar Básico'}
-                  </Button>
-                </div>
-              )}
-
-              {!isPro && (
-                <div className='w-44'>
-                  <Button
-                    onClick={handleUpgradeToPro}
-                    disabled={isLoadingUpgrade}
-                  >
-                    <span className='inline-flex items-center justify-center gap-2'>
-                      <Sparkle size={16} />
-                      {isLoadingUpgrade ? 'Abrindo...' : 'Virar Pro'}
-                    </span>
-                  </Button>
-                </div>
-              )}
-
-              {isPro && !hasPendingCancellation && (
-                <div className='w-48'>
-                  <Button
-                    variant='ghost'
-                    onClick={handleCancelSubscription}
-                    disabled={isLoadingCancel}
-                  >
-                    {isLoadingCancel ? 'Cancelando...' : 'Cancelar assinatura'}
-                  </Button>
-                </div>
-              )}
+            <div className='w-full sm:w-52'>
+              <InputFormControl
+                control={reportControl}
+                name='to'
+                label='Até'
+                type='date'
+              />
             </div>
-          </div>
-        )}
-      </section>
+            <div className='w-full sm:w-52'>
+              <Button type='submit' disabled={isLoadingReport}>
+                <span className='inline-flex items-center justify-center gap-2'>
+                  <FileText size={18} />
+                  {isLoadingReport ? 'Gerando...' : 'Gerar PDF'}
+                </span>
+              </Button>
+            </div>
+          </form>
+        </section>
+      )}
 
-      {/* ===== SEÇÃO 3: RELATÓRIO FINANCEIRO ===== */}
-      <section className='mt-6 rounded-[10px] border border-border bg-surface p-6'>
-        <h2 className='font-display text-lg font-bold'>Relatório financeiro</h2>
-        <p className='mt-1 text-[13px] text-text-muted'>
-          Gera um PDF com todos os pagamentos confirmados no período (exclui
-          pendentes, lista estornados fora do total).
-        </p>
-
-        <form
-          onSubmit={handleReportSubmit(handleGenerateReport)}
-          noValidate
-          className='mt-4 flex flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-end'
-        >
-          <div className='w-full sm:w-52'>
-            <InputFormControl
-              control={reportControl}
-              name='from'
-              label='De'
-              type='date'
-            />
-          </div>
-          <div className='w-full sm:w-52'>
-            <InputFormControl
-              control={reportControl}
-              name='to'
-              label='Até'
-              type='date'
-            />
-          </div>
-          <div className='w-full sm:w-52'>
-            <Button type='submit' disabled={isLoadingReport}>
-              <span className='inline-flex items-center justify-center gap-2'>
-                <FileText size={18} />
-                {isLoadingReport ? 'Gerando...' : 'Gerar PDF'}
-              </span>
-            </Button>
-          </div>
-        </form>
-      </section>
+      {!canEditWorkshop && !canViewFinancials && (
+        <div className='rounded-[10px] border border-border bg-surface p-10 text-center shadow-[0_1px_2px_rgba(43,36,32,0.06),0_8px_24px_-12px_rgba(43,36,32,0.14)]'>
+          <h3 className='font-display text-lg font-bold'>
+            Sem acesso a esta página
+          </h3>
+          <p className='mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-text-muted'>
+            Configurações da oficina são restritas a administradores e recepção.
+          </p>
+        </div>
+      )}
     </AppShell>
   );
 }

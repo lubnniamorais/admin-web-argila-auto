@@ -26,6 +26,7 @@ import {
 } from '@/hooks/stockMovements';
 import { api } from '@/lib/apiClient';
 import { MAINTENANCE_CATEGORY_OPTIONS } from '@/utils/maintenanceCategory';
+import { usePermissions } from '@/utils/permissions';
 import { withSSRAuth } from '@/utils/withSSRAuth';
 
 // ============ HELPERS NUMÉRICOS DE FORM (mesmo racional de
@@ -255,6 +256,7 @@ function SegmentedControl<TValue extends string>({
 
 export default function ProdutosPage() {
   const queryClient = useQueryClient();
+  const { canManageCatalog } = usePermissions();
 
   const [activeTab, setActiveTab] = useState<'pecas' | 'servicos'>('pecas');
 
@@ -851,16 +853,18 @@ export default function ProdutosPage() {
                 />
               </div>
 
-              <button
-                type='button'
-                onClick={() => setIsCreatePartModalOpen(true)}
-                className={buttonClassName('primary', 'w-auto px-5')}
-              >
-                <span className='inline-flex items-center gap-2'>
-                  <Plus size={18} />
-                  Nova peça
-                </span>
-              </button>
+              {canManageCatalog && (
+                <button
+                  type='button'
+                  onClick={() => setIsCreatePartModalOpen(true)}
+                  className={buttonClassName('primary', 'w-auto px-5')}
+                >
+                  <span className='inline-flex items-center gap-2'>
+                    <Plus size={18} />
+                    Nova peça
+                  </span>
+                </button>
+              )}
             </div>
 
             {!partsData || partsData.parts.length === 0 ? (
@@ -932,24 +936,26 @@ export default function ProdutosPage() {
                               </span>
                             </td>
                             <td className='py-2.5'>
-                              <div className='flex items-center gap-3'>
-                                <button
-                                  type='button'
-                                  onClick={() => setStockMovementPart(part)}
-                                  aria-label={`Movimento de estoque de ${part.name}`}
-                                  className='text-text-muted transition-colors hover:text-clay'
-                                >
-                                  <Package size={15} />
-                                </button>
-                                <button
-                                  type='button'
-                                  onClick={() => setEditingPart(part)}
-                                  aria-label={`Editar ${part.name}`}
-                                  className='text-text-muted transition-colors hover:text-clay'
-                                >
-                                  <Pencil size={15} />
-                                </button>
-                              </div>
+                              {canManageCatalog && (
+                                <div className='flex items-center gap-3'>
+                                  <button
+                                    type='button'
+                                    onClick={() => setStockMovementPart(part)}
+                                    aria-label={`Movimento de estoque de ${part.name}`}
+                                    className='text-text-muted transition-colors hover:text-clay'
+                                  >
+                                    <Package size={15} />
+                                  </button>
+                                  <button
+                                    type='button'
+                                    onClick={() => setEditingPart(part)}
+                                    aria-label={`Editar ${part.name}`}
+                                    className='text-text-muted transition-colors hover:text-clay'
+                                  >
+                                    <Pencil size={15} />
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
@@ -983,24 +989,26 @@ export default function ProdutosPage() {
                               </CategoryBadge>
                             </div>
                           </div>
-                          <div className='flex shrink-0 items-center gap-3'>
-                            <button
-                              type='button'
-                              onClick={() => setStockMovementPart(part)}
-                              aria-label={`Movimento de estoque de ${part.name}`}
-                              className='text-text-muted transition-colors hover:text-clay'
-                            >
-                              <Package size={15} />
-                            </button>
-                            <button
-                              type='button'
-                              onClick={() => setEditingPart(part)}
-                              aria-label={`Editar ${part.name}`}
-                              className='text-text-muted transition-colors hover:text-clay'
-                            >
-                              <Pencil size={15} />
-                            </button>
-                          </div>
+                          {canManageCatalog && (
+                            <div className='flex shrink-0 items-center gap-3'>
+                              <button
+                                type='button'
+                                onClick={() => setStockMovementPart(part)}
+                                aria-label={`Movimento de estoque de ${part.name}`}
+                                className='text-text-muted transition-colors hover:text-clay'
+                              >
+                                <Package size={15} />
+                              </button>
+                              <button
+                                type='button'
+                                onClick={() => setEditingPart(part)}
+                                aria-label={`Editar ${part.name}`}
+                                className='text-text-muted transition-colors hover:text-clay'
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         <div className='mt-3 flex items-center justify-between border-t border-border pt-3 font-mono text-[12.5px]'>
@@ -1052,16 +1060,18 @@ export default function ProdutosPage() {
                 />
               </div>
 
-              <button
-                type='button'
-                onClick={() => setIsCreateServiceModalOpen(true)}
-                className={buttonClassName('primary', 'w-auto px-5')}
-              >
-                <span className='inline-flex items-center gap-2'>
-                  <Plus size={18} />
-                  Novo serviço
-                </span>
-              </button>
+              {canManageCatalog && (
+                <button
+                  type='button'
+                  onClick={() => setIsCreateServiceModalOpen(true)}
+                  className={buttonClassName('primary', 'w-auto px-5')}
+                >
+                  <span className='inline-flex items-center gap-2'>
+                    <Plus size={18} />
+                    Novo serviço
+                  </span>
+                </button>
+              )}
             </div>
 
             {!servicesData || servicesData.services.length === 0 ? (
@@ -1109,14 +1119,16 @@ export default function ProdutosPage() {
                             <ActiveBadge active={service.active} />
                           </td>
                           <td className='py-2.5'>
-                            <button
-                              type='button'
-                              onClick={() => setEditingService(service)}
-                              aria-label={`Editar ${service.name}`}
-                              className='text-text-muted transition-colors hover:text-clay'
-                            >
-                              <Pencil size={15} />
-                            </button>
+                            {canManageCatalog && (
+                              <button
+                                type='button'
+                                onClick={() => setEditingService(service)}
+                                aria-label={`Editar ${service.name}`}
+                                className='text-text-muted transition-colors hover:text-clay'
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1143,14 +1155,16 @@ export default function ProdutosPage() {
                             <ActiveBadge active={service.active} />
                           </div>
                         </div>
-                        <button
-                          type='button'
-                          onClick={() => setEditingService(service)}
-                          aria-label={`Editar ${service.name}`}
-                          className='shrink-0 text-text-muted transition-colors hover:text-clay'
-                        >
-                          <Pencil size={15} />
-                        </button>
+                        {canManageCatalog && (
+                          <button
+                            type='button'
+                            onClick={() => setEditingService(service)}
+                            aria-label={`Editar ${service.name}`}
+                            className='shrink-0 text-text-muted transition-colors hover:text-clay'
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        )}
                       </div>
 
                       <p className='mt-3 border-t border-border pt-3 font-mono text-[12.5px]'>
