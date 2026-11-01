@@ -24,6 +24,7 @@ import {
   rowsTable,
   tableContent,
 } from '@/report/table';
+import { validateCNPJ } from '@/utils/validateCNPJ';
 import { withSSRAuth } from '@/utils/withSSRAuth';
 
 // Mesma fonte usada pelo admin-web-amip pro pdfmake (CDN oficial do
@@ -64,6 +65,16 @@ const optionalUf = zod
 
 const workshopFormSchema = zod.object({
   name: zod.string().trim().min(1, 'Informe o nome da oficina'),
+  // Só entra no formulário/payload quando a oficina ainda não tem CNPJ —
+  // ver bloco condicional no JSX e a mutation abaixo. Mesma validação do
+  // Signup (`validateCNPJ`, opcional) — ver `utils/validateCNPJ.ts`.
+  cnpj: zod
+    .string()
+    .trim()
+    .refine((value) => !value || validateCNPJ(value), {
+      message: 'CNPJ inválido',
+    })
+    .optional(),
   phone: zod.string().trim().optional(),
   email: optionalEmail,
   addressStreet: zod.string().trim().optional(),
@@ -170,6 +181,7 @@ export default function ConfiguracoesPage() {
       // mais abaixo) — useForm não espera a query, então nasce vazio.
       defaultValues: {
         name: '',
+        cnpj: '',
         phone: '',
         email: '',
         addressStreet: '',
@@ -197,6 +209,7 @@ export default function ConfiguracoesPage() {
 
     reset({
       name: workshop.name,
+      cnpj: workshop.cnpj ?? '',
       phone: workshop.phone ?? '',
       email: workshop.email ?? '',
       addressStreet: workshop.address.street ?? '',
@@ -215,6 +228,7 @@ export default function ConfiguracoesPage() {
     useMutation({
       mutationFn: async ({
         name,
+        cnpj,
         phone,
         email,
         addressStreet,
@@ -233,6 +247,16 @@ export default function ConfiguracoesPage() {
         await api.put('/workshops', {
           id: workshop.id,
           name,
+          // `cnpj` tem regra própria na API (ver openapi.yaml,
+          // `PUT /workshops`): omitir a chave preserva o valor atual;
+          // `ADMIN` só pode PREENCHER um CNPJ ainda vazio, nunca mudar
+          // ou limpar um já salvo (403). Por isso só manda a chave
+          // quando a oficina ainda não tinha CNPJ nenhum — se já tinha,
+          // o campo fica `disabled` no formulário (ver JSX), então
+          // `cnpj` aqui sempre seria o mesmo valor de qualquer forma;
+          // omitir em vez de reenviar evita depender de como a API trata
+          // um valor "igual ao que já está salvo".
+          ...(!workshop.cnpj && cnpj ? { cnpj } : {}),
           phone: phone || null,
           email: email || null,
           addressStreet: addressStreet || null,
@@ -255,8 +279,16 @@ export default function ConfiguracoesPage() {
         // (inclusive na tenant box da sidebar, que usa o mesmo useWorkshop).
         queryClient.invalidateQueries({ queryKey: ['workshop', 'me'] });
       },
-      onError: () => {
-        toast.error('Não foi possível salvar os dados da oficina.', {
+      onError: (error) => {
+        // Mesmo padrão já usado pro CNPJ duplicado no Signup — nunca
+        // mostrar a mensagem crua da API (vem em inglês), sempre uma
+        // em PT-BR própria (ver CLAUDE.md, "Como trabalhar").
+        const message =
+          axios.isAxiosError(error) && error.response?.status === 400
+            ? 'Esse CNPJ já está cadastrado em outra oficina.'
+            : 'Não foi possível salvar os dados da oficina.';
+
+        toast.error(message, {
           position: 'bottom-center',
           autoClose: 5000,
         });
@@ -266,7 +298,20 @@ export default function ConfiguracoesPage() {
 
   const handleUpdateWorkshop: SubmitHandler<IWorkshopFormData> = useCallback(
     async (formData) => {
-      await updateWorkshopMutate(formData);
+      // `try/catch` faltava aqui antes (bug real, pré-existente a esta
+      // sessão) — sem ele, o `mutateAsync` relança o erro depois de
+      // chamar o `onError` da mutation, e sem nada pra pegar essa
+      // rejeição, o Next.js mostrava a tela de erro de runtime por cima
+      // do toast (que já disparava certo). Só apareceu agora porque o
+      // CNPJ duplicado é o primeiro erro de verdade que esse formulário
+      // passou a ter como alcançar na prática. Mesmo padrão usado em
+      // todas as outras mutations do projeto (ver clientes-veiculos,
+      // produtos).
+      try {
+        await updateWorkshopMutate(formData);
+      } catch {
+        // erro já tratado no onError da mutation acima.
+      }
     },
     [updateWorkshopMutate]
   );
@@ -535,7 +580,9 @@ export default function ConfiguracoesPage() {
       <section className='rounded-[10px] border border-border bg-surface p-6'>
         <h2 className='font-display text-lg font-bold'>Dados da oficina</h2>
         <p className='mt-1 text-[13px] text-text-muted'>
-          CNPJ não é editável depois do cadastro.
+          {workshop?.cnpj
+            ? 'CNPJ não pode ser alterado depois de preenchido.'
+            : 'CNPJ ainda não informado — pode ser preenchido agora, mas não poderá ser alterado depois.'}
         </p>
 
         <form
@@ -550,20 +597,37 @@ export default function ConfiguracoesPage() {
             placeholder='Ex: Oficina do João'
           />
 
-          <div className='mt-4'>
-            <label
-              htmlFor='workshop-cnpj'
-              className='mb-1.5 block text-[11.5px] font-bold uppercase tracking-[0.04em] text-text-muted'
-            >
-              CNPJ
-            </label>
-            <input
-              id='workshop-cnpj'
-              value={workshop?.cnpj ?? 'Não informado'}
-              disabled
-              className='w-full rounded-[9px] border border-border-strong bg-surface-2 px-3.5 py-2.5 text-sm text-text-muted outline-none'
+          {/* Campo âncora com regra "preenche uma vez, nunca mais muda"
+              (ver openapi.yaml, PUT /workshops) — diferente de
+              sku/document/plate (sempre disabled, não dá nem pra
+              preencher depois), aqui o campo nasce editável enquanto a
+              oficina não tem CNPJ nenhum, e vira `disabled` assim que
+              um valor é salvo. Mesma máscara do Signup
+              (InputMaskFormControl, unmask padrão → só dígitos). */}
+          {workshop?.cnpj ? (
+            <div className='mt-4'>
+              <label
+                htmlFor='workshop-cnpj'
+                className='mb-1.5 block text-[11.5px] font-bold uppercase tracking-[0.04em] text-text-muted'
+              >
+                CNPJ
+              </label>
+              <input
+                id='workshop-cnpj'
+                value={workshop.cnpj}
+                disabled
+                className='w-full rounded-[9px] border border-border-strong bg-surface-2 px-3.5 py-2.5 text-sm text-text-muted outline-none'
+              />
+            </div>
+          ) : (
+            <InputMaskFormControl
+              control={control}
+              name='cnpj'
+              label='CNPJ (opcional)'
+              mask='00.000.000/0000-00'
+              placeholder='00.000.000/0001-00'
             />
-          </div>
+          )}
 
           <div className='flex gap-3'>
             <div className='flex-1'>
