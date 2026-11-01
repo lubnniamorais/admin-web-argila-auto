@@ -1,6 +1,6 @@
 # ArgilaAuto — Admin (admin-argila-auto)
 
-> Atualizado em 2026-11-01 (sessão que corrigiu um bug real de autenticação — usuário logado não aparecia na sidebar —, adicionou maiúsculas automáticas em campos âncora de Peças/Serviços, cores verde/vermelho no seletor de Direção do movimento de estoque (`b16de87`), e depois liberou o CNPJ da oficina pra ser preenchido depois do cadastro — API mudou em paralelo pelo usuário, `PUT /workshops` ganhou a regra "preenche uma vez, só `SUPER_ADMIN` muda depois"; ver "Estado atual" — tudo testado no navegador e commitado). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
+> Atualizado em 2026-11-01 (sessão que corrigiu um bug real de autenticação — usuário logado não aparecia na sidebar —, adicionou maiúsculas automáticas em campos âncora de Peças/Serviços, cores verde/vermelho no seletor de Direção do movimento de estoque (`b16de87`), e depois liberou o CNPJ da oficina pra ser preenchido depois do cadastro (`26c52c9`) — API mudou em paralelo pelo usuário, `PUT /workshops` ganhou a regra "preenche uma vez, só `SUPER_ADMIN` muda depois"; ver "Estado atual" — tudo testado no navegador e commitado). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
 
 ## Como trabalhar neste projeto (combinado com o usuário)
 
