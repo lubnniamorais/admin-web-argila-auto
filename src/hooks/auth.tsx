@@ -92,36 +92,64 @@ const AuthProvider = ({ children }: IAuthProviderProps) => {
   const [isLoadingAuthenticated, setIsLoadingAuthenticated] = useState(false);
 
   // FUNCTIONS
-  const signIn = useCallback(async ({ email, password }: IAuthCredentials) => {
-    const response = await api.post('/sessions', {
-      email,
-      password,
-    });
 
-    const { token, refresh_token } = response.data;
+  // Busca os dados do usuário autenticado (`GET /users/me`) e popula o
+  // contexto — extraída pra uma função própria (antes só existia inline
+  // dentro do efeito de carregamento inicial, mais abaixo) porque esse
+  // efeito roda só UMA vez, na primeira montagem do `AuthProvider`.
+  //
+  // Bug real corrigido em 01/11/2026: `signIn`/`signUp` levam pro
+  // Dashboard com `router.push`/`Router.push` (troca de tela só no
+  // React, sem recarregar a página) — o efeito de montagem já tinha
+  // rodado antes disso, nesse momento ainda sem token nenhum (a pessoa
+  // estava na tela de Welcome/Login/Signup), e nunca rodava de novo
+  // depois do login/cadastro. Resultado: `user` ficava `undefined` pra
+  // sempre naquela sessão do navegador (sidebar sem nome nem iniciais no
+  // rodapé), só aparecendo se a pessoa desse F5 na página manualmente.
+  // Chamada agora tanto no efeito de montagem (sessão retomada de um
+  // cookie já existente) quanto logo depois de `signIn`/`signUp`
+  // confirmarem o token (sessão nova).
+  const fetchAuthenticatedUser = useCallback(async () => {
+    const response = await api.get('/users/me');
 
-    /** NOTE
-     *
-     * maxAge: quanto tempo queremos armazenar o cookie, manter salvo no navegador.
-     * path: diz quais caminhos da aplicação vai ter acesso ao cookie. Quando colocamos a
-     * barra "/" falamos que qualquer endereço da aplicação vai ter acesso ao cookie.
-     * Fazemos isso quando é um cookie que vai ser usado de forma global.
-     *
-     */
-    setCookie(undefined, 'argilaauto:token', token, {
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: '/',
-    });
-
-    setCookie(undefined, 'argilaauto:refresh_token', refresh_token, {
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: '/',
-    });
-
-    api.defaults.headers.Authorization = `Bearer ${token}`;
-
-    Router.push('/dashboard');
+    setData({ user: response.data.user });
   }, []);
+
+  const signIn = useCallback(
+    async ({ email, password }: IAuthCredentials) => {
+      const response = await api.post('/sessions', {
+        email,
+        password,
+      });
+
+      const { token, refresh_token } = response.data;
+
+      /** NOTE
+       *
+       * maxAge: quanto tempo queremos armazenar o cookie, manter salvo no navegador.
+       * path: diz quais caminhos da aplicação vai ter acesso ao cookie. Quando colocamos a
+       * barra "/" falamos que qualquer endereço da aplicação vai ter acesso ao cookie.
+       * Fazemos isso quando é um cookie que vai ser usado de forma global.
+       *
+       */
+      setCookie(undefined, 'argilaauto:token', token, {
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        path: '/',
+      });
+
+      setCookie(undefined, 'argilaauto:refresh_token', refresh_token, {
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        path: '/',
+      });
+
+      api.defaults.headers.Authorization = `Bearer ${token}`;
+
+      await fetchAuthenticatedUser();
+
+      Router.push('/dashboard');
+    },
+    [fetchAuthenticatedUser]
+  );
 
   // signUp é o cadastro público (POST /workshops/signup) — igual ao
   // login, a API já devolve token/refresh_token na hora (sem precisar
@@ -136,26 +164,31 @@ const AuthProvider = ({ children }: IAuthProviderProps) => {
   // depois navegar pro link de pagamento da AbacatePay). Essa decisão é
   // da página de signup (src/pages/signup/index.page.tsx), não do
   // AuthContext.
-  const signUp = useCallback(async ({ workshop, user }: ISignUpCredentials) => {
-    const response = await api.post('/workshops/signup', {
-      workshop,
-      user,
-    });
+  const signUp = useCallback(
+    async ({ workshop, user }: ISignUpCredentials) => {
+      const response = await api.post('/workshops/signup', {
+        workshop,
+        user,
+      });
 
-    const { token, refresh_token } = response.data;
+      const { token, refresh_token } = response.data;
 
-    setCookie(undefined, 'argilaauto:token', token, {
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: '/',
-    });
+      setCookie(undefined, 'argilaauto:token', token, {
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        path: '/',
+      });
 
-    setCookie(undefined, 'argilaauto:refresh_token', refresh_token, {
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: '/',
-    });
+      setCookie(undefined, 'argilaauto:refresh_token', refresh_token, {
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        path: '/',
+      });
 
-    api.defaults.headers.Authorization = `Bearer ${token}`;
-  }, []);
+      api.defaults.headers.Authorization = `Bearer ${token}`;
+
+      await fetchAuthenticatedUser();
+    },
+    [fetchAuthenticatedUser]
+  );
 
   const updateUser = useCallback((user: IUser) => {
     setData({
@@ -202,24 +235,15 @@ const AuthProvider = ({ children }: IAuthProviderProps) => {
     if (token) {
       setIsLoadingAuthenticated(true);
 
-      api
-        .get('/users/me')
-        .then((response) => {
-          const userData = response.data.user;
-
-          setData({
-            user: userData,
-          });
-
-          // console.log('No auth dentro do effect: ', userData);
-
+      fetchAuthenticatedUser()
+        .then(() => {
           setIsLoadingAuthenticated(false);
         })
         .catch(() => {
           signOut();
         });
     }
-  }, []);
+  }, [fetchAuthenticatedUser]);
 
   return (
     <AuthContext.Provider
