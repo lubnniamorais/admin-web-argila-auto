@@ -1,6 +1,6 @@
 # ArgilaAuto — Admin (admin-argila-auto)
 
-> Atualizado em 2026-11-01 (sessão que corrigiu um bug real de autenticação — usuário logado não aparecia na sidebar —, adicionou maiúsculas automáticas em campos âncora de Peças/Serviços e cores verde/vermelho no seletor de Direção do movimento de estoque; ver "Estado atual" — tudo testado no navegador e commitado). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
+> Atualizado em 2026-11-01 (sessão que corrigiu um bug real de autenticação — usuário logado não aparecia na sidebar —, adicionou maiúsculas automáticas em campos âncora de Peças/Serviços e cores verde/vermelho no seletor de Direção do movimento de estoque; ver "Estado atual" — tudo testado no navegador e commitado em `b16de87`). Mantenha este arquivo atualizado conforme o projeto evolui — é a referência pra qualquer sessão futura (Claude ou humano) entender onde as coisas estão e por quê.
 
 ## Como trabalhar neste projeto (combinado com o usuário)
 
