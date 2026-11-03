@@ -14,17 +14,30 @@ import { IUser, useAuth } from '@/hooks/auth';
 //                        GET /service-order-payments/report
 //  - canEditWorkshop:    PUT /workshops, upgrade-to-pro,
 //                        subscribe-to-basic, cancel-subscription
+//  - canCreateServiceOrder: POST /service-orders
+//  - canCancelServiceOrder: PATCH /service-orders/:id/status com
+//                        status=CANCELED (única transição vetada pra
+//                        MECHANIC — o resto da máquina de estados,
+//                        incluindo REJECTED, é ADMIN/RECEPTIONIST/
+//                        MECHANIC igual)
+//  - canSubmitUrgencyFeedback: PATCH /service-orders/:id/urgency-feedback
+//                        (inverso dos outros — só MECHANIC, ADMIN/
+//                        RECEPTIONIST bloqueados)
 export interface IPermissions {
   canManageCustomers: boolean;
   canDeleteCustomer: boolean;
   canManageCatalog: boolean;
   canViewFinancials: boolean;
   canEditWorkshop: boolean;
+  canCreateServiceOrder: boolean;
+  canCancelServiceOrder: boolean;
+  canSubmitUrgencyFeedback: boolean;
 }
 
 function getPermissions(role: IUser['role'] | undefined): IPermissions {
   const isAdmin = role === 'ADMIN';
   const isReceptionist = role === 'RECEPTIONIST';
+  const isMechanic = role === 'MECHANIC';
 
   return {
     canManageCustomers: isAdmin || isReceptionist,
@@ -32,6 +45,9 @@ function getPermissions(role: IUser['role'] | undefined): IPermissions {
     canManageCatalog: isAdmin || isReceptionist,
     canViewFinancials: isAdmin || isReceptionist,
     canEditWorkshop: isAdmin,
+    canCreateServiceOrder: isAdmin || isReceptionist,
+    canCancelServiceOrder: isAdmin || isReceptionist,
+    canSubmitUrgencyFeedback: isMechanic,
   };
 }
 

@@ -16,7 +16,17 @@ interface DialogProps {
   // (leitor de tela fica sem contexto do que o diálogo faz).
   description: string;
   children: ReactNode;
+  // 'lg' pra conteúdo mais denso (ex.: modal de detalhes da OS — status +
+  // cliente/veículo + itens + urgência por IA não cabe confortável no
+  // max-w-lg padrão). Default mantém o comportamento de antes pra quem
+  // já usa este componente (cadastro de cliente/veículo, peça, serviço).
+  size?: 'default' | 'lg';
 }
+
+const SIZE_CLASSNAME: Record<'default' | 'lg', string> = {
+  default: 'max-w-lg',
+  lg: 'max-w-2xl',
+};
 
 // Modal genérico reaproveitável (cadastro combinado de cliente+veículo,
 // edição de cliente, adicionar/editar veículo — ver
@@ -33,6 +43,7 @@ export function Dialog({
   title,
   description,
   children,
+  size = 'default',
 }: DialogProps) {
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -43,7 +54,7 @@ export function Dialog({
         <RadixDialog.Overlay className='fixed inset-0 z-40 bg-black/50' />
 
         <RadixDialog.Content
-          className='fixed top-1/2 left-1/2 z-50 max-h-[85vh] w-[92vw] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[12px] border border-border bg-surface p-6 shadow-[0_8px_24px_-12px_rgba(43,36,32,0.3)] outline-none'
+          className={`fixed top-1/2 left-1/2 z-50 max-h-[85vh] w-[92vw] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[12px] border border-border bg-surface p-6 shadow-[0_8px_24px_-12px_rgba(43,36,32,0.3)] outline-none ${SIZE_CLASSNAME[size]}`}
           // Esc e foco preso dentro do modal também já vêm do Radix.
         >
           <div className='flex items-start justify-between gap-4'>

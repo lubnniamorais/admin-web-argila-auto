@@ -18,6 +18,7 @@ import { InputFormControl } from '@/components/Form/InputFormControl';
 import { SelectPickerFormControl } from '@/components/Form/SelectPickerFormControl';
 import { SwitchFormControl } from '@/components/Form/SwitchFormControl';
 import { Pagination } from '@/components/Pagination';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { IPart, useParts } from '@/hooks/parts';
 import { IService, useServices } from '@/hooks/services';
 import {
@@ -185,72 +186,6 @@ function ActiveBadge({ active }: { active: boolean }) {
     >
       {active ? 'Ativo' : 'Inativo'}
     </span>
-  );
-}
-
-// `tone` é opcional por opção (decisão confirmada com o usuário em
-// 01/11/2026, pro seletor de Direção do movimento de estoque) — quando
-// uma opção realmente significa "bom"/"ruim" (Entrada soma, Saída
-// subtrai), fica mais fácil de ler com verde/vermelho em vez da cor
-// neutra padrão (clay). O seletor de Tipo de movimento (Entrada por
-// compra / Ajuste de inventário) não passa `tone` nenhum — nenhuma das
-// duas opções é "boa" ou "ruim", só métodos diferentes.
-const segmentButton = tv({
-  base: 'flex-1 rounded-[8px] px-3 py-2 text-center text-[13.5px] font-semibold transition-colors',
-  variants: {
-    selected: {
-      true: '',
-      false: 'text-text-muted hover:bg-surface-2',
-    },
-    tone: {
-      neutral: '',
-      good: '',
-      crit: '',
-    },
-  },
-  compoundVariants: [
-    { selected: true, tone: 'neutral', className: 'bg-clay text-white' },
-    { selected: true, tone: 'good', className: 'bg-good text-white' },
-    { selected: true, tone: 'crit', className: 'bg-crit text-white' },
-  ],
-  defaultVariants: {
-    tone: 'neutral',
-  },
-});
-
-// Controle de 2 opções usado 2x no formulário de movimento de estoque
-// (tipo, e depois direção quando o tipo é ajuste) — par de botões
-// simples em vez de puxar RadioGroup/Select pra uma escolha binária
-// apresentacional, local a este form só.
-function SegmentedControl<TValue extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: {
-    value: TValue;
-    label: string;
-    tone?: 'neutral' | 'good' | 'crit';
-  }[];
-  value: TValue;
-  onChange: (value: TValue) => void;
-}) {
-  return (
-    <div className='flex gap-1 rounded-[9px] border border-border-strong bg-surface-2 p-1'>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type='button'
-          onClick={() => onChange(option.value)}
-          className={segmentButton({
-            selected: option.value === value,
-            tone: option.tone ?? 'neutral',
-          })}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
   );
 }
 
