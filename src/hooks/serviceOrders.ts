@@ -70,7 +70,13 @@ export interface IServiceOrder {
 }
 
 export interface IUseServiceOrdersParams {
-  status?: IOrderStatus;
+  // Aceita um status só (Ordens de Serviço não filtra por padrão, só
+  // busca) ou uma lista (Orçamentos, que precisa achar OS em 4 status ao
+  // mesmo tempo: PENDING_QUOTE/AWAITING_APPROVAL/REJECTED/APPROVED — ver
+  // CLAUDE.md, "Próxima coisa a fazer"). A API aceita isso desde
+  // 04/11/2026 (ver api-argila-auto/CLAUDE.md) — repetindo a chave
+  // "status=" na URL, não com colchetes.
+  status?: IOrderStatus | IOrderStatus[];
   searchParam?: string;
   page?: number;
   perPage?: number;
@@ -82,8 +88,8 @@ export interface IUseServiceOrdersResult {
 }
 
 // Lista de OS — usada pela Lista de Ordens de Serviço (única view desde
-// 03/11/2026, Kanban removido) e, futuramente, pela tela de Orçamentos
-// (mesmo endpoint, outro filtro de status).
+// 03/11/2026, Kanban removido) e por Orçamentos (mesmo endpoint, filtro
+// de status diferente).
 export function useServiceOrders({
   status,
   searchParam,
@@ -100,6 +106,16 @@ export function useServiceOrders({
           page,
           perPage,
         },
+        // Só importa quando `status` é um array (Orçamentos): por padrão o
+        // Axios serializaria `status: ['A','B']` como `status[]=A&status[]=B`
+        // (colchetes), que o parser de query do Express desta API NÃO
+        // reconhece como array (vira uma chave literal "status[]", vazia
+        // pro filtro) — `indexes: null` faz o Axios repetir a chave sem
+        // colchetes (`status=A&status=B`), do jeito que o Express entende
+        // automaticamente. Confirmado testando os dois lados antes de
+        // implementar (ver api-argila-auto/CLAUDE.md). Sem efeito quando
+        // `status` é uma string só (uso de sempre, Ordens de Serviço).
+        paramsSerializer: { indexes: null },
       });
 
       return {

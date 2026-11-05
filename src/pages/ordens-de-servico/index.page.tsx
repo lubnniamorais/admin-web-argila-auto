@@ -1,44 +1,41 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { format } from '@formkit/tempo';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import Head from 'next/head';
-import { MagnifyingGlass, Plus, Sparkle, Trash } from 'phosphor-react';
+import { MagnifyingGlass, Plus } from 'phosphor-react';
 import { useEffect, useState } from 'react';
-import { Controller, SubmitHandler, useForm } from 'react-hook-form';
+import { SubmitHandler, useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { z as zod } from 'zod';
 
 import { AppShell } from '@/components/AppShell';
-import { Dialog } from '@/components/Dialog';
 import { AlertDialog } from '@/components/Form/AlertDialog';
-import { Button, buttonClassName } from '@/components/Form/Button';
+import { buttonClassName, Button } from '@/components/Form/Button';
 import { IComboboxOption } from '@/components/Form/Combobox';
 import { ComboboxFormControl } from '@/components/Form/ComboboxFormControl';
 import { InputFormControl } from '@/components/Form/InputFormControl';
 import { SelectPickerFormControl } from '@/components/Form/SelectPickerFormControl';
 import { TextareaFormControl } from '@/components/Form/TextareaFormControl';
+import { Dialog } from '@/components/Dialog';
 import { Pagination } from '@/components/Pagination';
-import { SegmentedControl } from '@/components/SegmentedControl';
+import { ServiceOrderDetailsModal } from '@/components/ServiceOrderDetailsModal';
 import { ICustomer, useCustomers } from '@/hooks/customers';
-import { IPart, useParts } from '@/hooks/parts';
-import { IService, useServices } from '@/hooks/services';
-import {
-  IServiceOrder,
-  IServiceOrderItem,
-  IUrgencyLevel,
-  useServiceOrderItemNames,
-  useServiceOrders,
-} from '@/hooks/serviceOrders';
+import { IServiceOrder, useServiceOrders } from '@/hooks/serviceOrders';
 import { useWorkshop } from '@/hooks/workshop';
 import { api } from '@/lib/apiClient';
 import {
+  formatDeliveryDate,
   getValidNextStatuses,
   IOrderStatus,
+  isOrderOverdue,
   ORDER_STATUS_BADGE_CLASSNAME,
   ORDER_STATUS_LABEL,
 } from '@/utils/orderStatus';
 import { usePermissions } from '@/utils/permissions';
+import {
+  URGENCY_LEVEL_BADGE_CLASSNAME,
+  URGENCY_LEVEL_LABEL,
+} from '@/utils/urgencyLevel';
 import { withSSRAuth } from '@/utils/withSSRAuth';
 
 const SEARCH_DEBOUNCE_MS = 400;
@@ -49,26 +46,6 @@ function formatCurrencyBRL(value: number): string {
     style: 'currency',
     currency: 'BRL',
   }).format(value);
-}
-
-const URGENCY_LEVEL_LABEL: Record<IUrgencyLevel, string> = {
-  LOW: 'Baixa',
-  MEDIUM: 'Média',
-  HIGH: 'Alta',
-  CRITICAL: 'Crítica',
-};
-
-const URGENCY_LEVEL_BADGE_CLASSNAME: Record<IUrgencyLevel, string> = {
-  LOW: 'bg-good-soft text-good',
-  MEDIUM: 'bg-warn-soft text-warn',
-  HIGH: 'bg-warn-soft text-warn',
-  CRITICAL: 'bg-crit-soft text-crit',
-};
-
-// "2026-11-05T00:00:00.000Z" -> "05/11" — usado na Lista pra mostrar a
-// previsão de entrega (vermelho/negrito se atrasada).
-function formatDeliveryDate(dateIso: string): string {
-  return format(new Date(dateIso), 'DD/MM', 'pt-BR');
 }
 
 // Mesmo racional de requiredCoercedNumber em produtos/clientes-veiculos —
@@ -92,52 +69,11 @@ const createServiceOrderSchema = zod.object({
 });
 type ICreateServiceOrderFormData = zod.infer<typeof createServiceOrderSchema>;
 
-// ============ SCHEMA: EDITAR DADOS DA OS (PUT /service-orders) ============
-const editServiceOrderSchema = zod.object({
-  currentMileage: requiredCoercedNumber('Quilometragem é obrigatória'),
-  customerComplaint: zod.string().trim().min(1, 'Descreva a queixa do cliente'),
-  diagnosis: zod.string().optional(),
-  estimatedDeliveryDate: zod.string().optional(),
-});
-type IEditServiceOrderFormData = zod.infer<typeof editServiceOrderSchema>;
-
-// ============ SCHEMA: ADICIONAR ITEM (POST .../items) ============
-const addItemSchema = zod.object({
-  type: zod.enum(['PART', 'SERVICE']),
-  itemId: zod.string().min(1, 'Selecione uma peça ou serviço'),
-  quantity: requiredCoercedNumber('Quantidade é obrigatória').refine(
-    (value) => value >= 1,
-    'Quantidade mínima é 1'
-  ),
-});
-type IAddItemFormData = zod.infer<typeof addItemSchema>;
-
-// ============ CARTÃO DO KANBAN ============
-// Redesenhado em 02/11/2026 (decisão confirmada com o usuário, depois de
-// usar o quadro de verdade e achar o cartão original — cópia fiel do
-// protótipo — pouco útil pra triagem: sem urgência, sem prévia da
-// queixa, sem previsão de entrega visíveis). `isPro` controla a borda/
-// selo de urgência (campo só existe de verdade em workshop Pro). Usada
-// na Lista (única view desde 03/11/2026 — Quadro/Kanban removido, ver
-// CLAUDE.md) pra calcular se a previsão de entrega está atrasada.
-function isOrderOverdue(order: IServiceOrder): boolean {
-  return (
-    order.estimated_delivery_date !== null &&
-    order.status !== 'COMPLETED' &&
-    order.status !== 'CANCELED' &&
-    new Date(order.estimated_delivery_date) < new Date()
-  );
-}
-
 export default function OrdensDeServicoPage() {
   const queryClient = useQueryClient();
   const { data: workshop } = useWorkshop();
   const isPro = workshop?.subscription.plan === 'PRO';
-  const {
-    canCreateServiceOrder,
-    canCancelServiceOrder,
-    canSubmitUrgencyFeedback,
-  } = usePermissions();
+  const { canCreateServiceOrder, canCancelServiceOrder } = usePermissions();
 
   const [cancelConfirmOrder, setCancelConfirmOrder] =
     useState<IServiceOrder | null>(null);
@@ -284,7 +220,9 @@ export default function OrdensDeServicoPage() {
   // confirmada com o usuário: a Lista já cobria tudo que o board fazia,
   // com usabilidade melhor pra quem não pensa em "fluxo de colunas" no
   // dia a dia). Mesmo padrão de busca+paginação já usado em
-  // Clientes/Produtos.
+  // Clientes/Produtos. Não filtra por status — pra isso ver `/orcamentos`,
+  // que mostra só as OS em fase de orçamento (mesmo endpoint, filtro
+  // diferente).
   const [listSearchInput, setListSearchInput] = useState('');
   const [listSearchParam, setListSearchParam] = useState('');
   const [listPage, setListPage] = useState(1);
@@ -317,223 +255,18 @@ export default function OrdensDeServicoPage() {
   // END FUNCTIONS (lista de OS)
 
   // FUNCTIONS (modal: detalhes da OS)
+  // O modal em si (edição, itens, urgência por IA) foi extraído em
+  // 04/11/2026 pra `ServiceOrderDetailsModal`, compartilhado com
+  // `/orcamentos` (ver comentário no próprio componente) — aqui só fica o
+  // que é específico desta tela: qual OS está selecionada, lida sempre de
+  // dentro de `listData` (não um snapshot do clique, mesmo racional já
+  // documentado no componente compartilhado).
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
-  // Lê sempre a versão mais atual dentro de `listData` em vez de guardar
-  // o objeto inteiro no clique — mesmo bug/correção já documentado no
-  // movimento de estoque de Produtos (31/10/2026): sem isso, editar a OS
-  // ou adicionar um item não atualizaria o que o modal já aberto mostra.
-  // A Lista não filtra por status (só busca), então um item continua
-  // aparecendo nela mesmo depois de mudar de status.
   const selectedOrder = selectedOrderId
     ? (listData?.serviceOrders.find((order) => order.id === selectedOrderId) ??
       null)
     : null;
-
-  const {
-    control: editControl,
-    handleSubmit: handleEditSubmit,
-    reset: resetEditForm,
-  } = useForm<IEditServiceOrderFormData>({
-    resolver: zodResolver(editServiceOrderSchema),
-  });
-
-  useEffect(() => {
-    if (!selectedOrder) {
-      return;
-    }
-
-    resetEditForm({
-      currentMileage: selectedOrder.current_mileage,
-      customerComplaint: selectedOrder.customer_complaint,
-      diagnosis: selectedOrder.diagnosis ?? '',
-      estimatedDeliveryDate: selectedOrder.estimated_delivery_date
-        ? selectedOrder.estimated_delivery_date.slice(0, 10)
-        : '',
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedOrder?.id]);
-
-  const { mutateAsync: updateOrderMutate, isPending: isUpdatingOrder } =
-    useMutation({
-      mutationFn: async (formData: IEditServiceOrderFormData) => {
-        if (!selectedOrder) {
-          throw new Error('Nenhuma OS selecionada.');
-        }
-
-        const response = await api.put('/service-orders', {
-          id: selectedOrder.id,
-          currentMileage: formData.currentMileage,
-          customerComplaint: formData.customerComplaint,
-          diagnosis: formData.diagnosis || null,
-          estimatedDeliveryDate: formData.estimatedDeliveryDate
-            ? new Date(formData.estimatedDeliveryDate).toISOString()
-            : null,
-        });
-
-        return response.data.service_order as IServiceOrder;
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['service-orders'] });
-        toast.success('Ordem de serviço atualizada.');
-      },
-      onError: () => {
-        toast.error('Não foi possível salvar as alterações.');
-      },
-    });
-
-  const handleUpdateOrder: SubmitHandler<IEditServiceOrderFormData> = async (
-    formData
-  ) => {
-    try {
-      await updateOrderMutate(formData);
-    } catch {
-      // erro já tratado no onError da mutation acima.
-    }
-  };
-
-  // Itens — busca/seleção de peça ou serviço do catálogo
-  const [itemSearchInput, setItemSearchInput] = useState('');
-  const [itemSearchParam, setItemSearchParam] = useState('');
-  const [selectedItemLabel, setSelectedItemLabel] = useState('');
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setItemSearchParam(itemSearchInput);
-    }, SEARCH_DEBOUNCE_MS);
-
-    return () => clearTimeout(timeoutId);
-  }, [itemSearchInput]);
-
-  const { data: itemPartsData, isLoading: isLoadingItemParts } = useParts({
-    page: 1,
-    perPage: 8,
-    searchParam: itemSearchParam,
-  });
-  const { data: itemServicesData, isLoading: isLoadingItemServices } =
-    useServices({ page: 1, perPage: 8, searchParam: itemSearchParam });
-
-  const {
-    control: addItemControl,
-    handleSubmit: handleAddItemSubmit,
-    watch: watchAddItem,
-    setValue: setAddItemValue,
-    reset: resetAddItemForm,
-  } = useForm<IAddItemFormData>({
-    resolver: zodResolver(addItemSchema),
-    defaultValues: { type: 'PART', itemId: '', quantity: 1 },
-  });
-
-  const addItemType = watchAddItem('type');
-
-  const itemOptions: IComboboxOption[] =
-    addItemType === 'PART'
-      ? (itemPartsData?.parts ?? []).map((part: IPart) => ({
-          value: part.id,
-          label: part.name,
-          description: `${part.sku} · ${formatCurrencyBRL(part.sale_price)}`,
-        }))
-      : (itemServicesData?.services ?? []).map((service: IService) => ({
-          value: service.id,
-          label: service.name,
-          description: formatCurrencyBRL(service.default_price),
-        }));
-
-  const { mutateAsync: addItemMutate, isPending: isAddingItem } = useMutation({
-    mutationFn: async (formData: IAddItemFormData) => {
-      if (!selectedOrder) {
-        throw new Error('Nenhuma OS selecionada.');
-      }
-
-      const response = await api.post(
-        `/service-orders/${selectedOrder.id}/items`,
-        {
-          type: formData.type,
-          partId: formData.type === 'PART' ? formData.itemId : undefined,
-          serviceId: formData.type === 'SERVICE' ? formData.itemId : undefined,
-          quantity: formData.quantity,
-        }
-      );
-
-      return response.data.service_order as IServiceOrder;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['service-orders'] });
-      toast.success('Item adicionado.');
-    },
-    onError: (error) => {
-      if (axios.isAxiosError(error) && error.response?.status === 400) {
-        toast.error('Estoque insuficiente pra essa peça.');
-        return;
-      }
-
-      toast.error('Não foi possível adicionar o item.');
-    },
-  });
-
-  const handleAddItem: SubmitHandler<IAddItemFormData> = async (formData) => {
-    try {
-      await addItemMutate(formData);
-      resetAddItemForm({ type: formData.type, itemId: '', quantity: 1 });
-      setSelectedItemLabel('');
-      setItemSearchInput('');
-    } catch {
-      // erro já tratado no onError da mutation acima.
-    }
-  };
-
-  const [itemToRemove, setItemToRemove] = useState<IServiceOrderItem | null>(
-    null
-  );
-  const itemNames = useServiceOrderItemNames(selectedOrder?.items ?? []);
-
-  const { mutate: removeItemMutate, isPending: isRemovingItem } = useMutation({
-    mutationFn: async (item: IServiceOrderItem) => {
-      if (!selectedOrder) {
-        throw new Error('Nenhuma OS selecionada.');
-      }
-
-      const response = await api.delete(
-        `/service-orders/${selectedOrder.id}/items/${item.id}`
-      );
-
-      return response.data.service_order as IServiceOrder;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['service-orders'] });
-      toast.success('Item removido.');
-      setItemToRemove(null);
-    },
-    onError: () => {
-      toast.error('Não foi possível remover o item.');
-    },
-  });
-
-  // Urgência por IA — feedback do mecânico
-  const {
-    mutate: submitUrgencyFeedbackMutate,
-    isPending: isSubmittingFeedback,
-  } = useMutation({
-    mutationFn: async (level: IUrgencyLevel) => {
-      if (!selectedOrder) {
-        throw new Error('Nenhuma OS selecionada.');
-      }
-
-      const response = await api.patch(
-        `/service-orders/${selectedOrder.id}/urgency-feedback`,
-        { level }
-      );
-
-      return response.data.service_order as IServiceOrder;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['service-orders'] });
-      toast.success('Feedback registrado.');
-    },
-    onError: () => {
-      toast.error('Não foi possível registrar o feedback.');
-    },
-  });
   // END FUNCTIONS (modal: detalhes da OS)
 
   return (
@@ -907,263 +640,10 @@ export default function OrdensDeServicoPage() {
       </Dialog>
       {/* ============ FIM MODAL: NOVA ORDEM DE SERVIÇO ============ */}
 
-      {/* ============ MODAL: DETALHES DA OS ============ */}
-      <Dialog
-        open={selectedOrder !== null}
-        onOpenChange={(open) => !open && setSelectedOrderId(null)}
-        title={selectedOrder?.order_code ?? ''}
-        description={
-          selectedOrder
-            ? `${selectedOrder.vehicle.brand} ${selectedOrder.vehicle.model} · ${selectedOrder.customer.name}`
-            : ''
-        }
-        size='lg'
-      >
-        {selectedOrder && (
-          <div className='flex flex-col gap-5'>
-            <div>
-              <span
-                className={`inline-flex rounded-full px-2.5 py-1 text-[12px] font-bold ${ORDER_STATUS_BADGE_CLASSNAME[selectedOrder.status]}`}
-              >
-                {ORDER_STATUS_LABEL[selectedOrder.status]}
-              </span>
-              <p className='mt-1.5 text-[12px] text-text-muted'>
-                O status muda pelo seletor "Mudar status" na lista, não por
-                aqui.
-              </p>
-            </div>
-
-            <div className='grid grid-cols-2 gap-3 rounded-[9px] border border-border bg-surface-2 p-3 text-[13px]'>
-              <div>
-                <div className='text-[11px] font-bold uppercase tracking-[0.04em] text-text-muted'>
-                  Veículo
-                </div>
-                <div className='font-mono'>
-                  {selectedOrder.vehicle.plate ?? '—'}
-                </div>
-              </div>
-              <div>
-                <div className='text-[11px] font-bold uppercase tracking-[0.04em] text-text-muted'>
-                  Quilometragem (na abertura)
-                </div>
-                <div>
-                  {selectedOrder.current_mileage.toLocaleString('pt-BR')} km
-                </div>
-              </div>
-            </div>
-
-            {isPro && (
-              <div className='rounded-[9px] border border-border bg-surface p-3'>
-                <div className='flex items-center gap-2'>
-                  <Sparkle size={15} weight='fill' className='text-clay' />
-                  <span className='text-[13px] font-bold'>Urgência por IA</span>
-                  <span className='rounded-full bg-clay-soft px-2 py-0.5 text-[10.5px] font-extrabold uppercase tracking-wide text-clay-deep'>
-                    Pro
-                  </span>
-                </div>
-
-                {selectedOrder.ai_urgency_suggestion ? (
-                  <>
-                    <span
-                      className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[11.5px] font-bold ${URGENCY_LEVEL_BADGE_CLASSNAME[selectedOrder.ai_urgency_suggestion]}`}
-                    >
-                      {URGENCY_LEVEL_LABEL[selectedOrder.ai_urgency_suggestion]}
-                    </span>
-                    {selectedOrder.ai_urgency_reason && (
-                      <p className='mt-1.5 text-[12.5px] text-text-muted'>
-                        {selectedOrder.ai_urgency_reason}
-                      </p>
-                    )}
-
-                    {canSubmitUrgencyFeedback && (
-                      <div className='mt-3'>
-                        <p className='mb-1.5 text-[11px] font-bold uppercase tracking-[0.04em] text-text-muted'>
-                          {selectedOrder.mechanic_urgency_feedback
-                            ? 'Sua avaliação'
-                            : 'Você concorda com essa urgência?'}
-                        </p>
-                        <div className='flex flex-wrap gap-1.5'>
-                          {(
-                            [
-                              'LOW',
-                              'MEDIUM',
-                              'HIGH',
-                              'CRITICAL',
-                            ] as IUrgencyLevel[]
-                          ).map((level) => (
-                            <button
-                              key={level}
-                              type='button'
-                              disabled={isSubmittingFeedback}
-                              onClick={() => submitUrgencyFeedbackMutate(level)}
-                              className={`rounded-full px-2.5 py-1 text-[11.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                                selectedOrder.mechanic_urgency_feedback ===
-                                level
-                                  ? URGENCY_LEVEL_BADGE_CLASSNAME[level]
-                                  : 'bg-surface-2 text-text-muted hover:bg-border'
-                              }`}
-                            >
-                              {URGENCY_LEVEL_LABEL[level]}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p className='mt-2 text-[12.5px] text-text-muted'>
-                    Ainda sem sugestão da IA pra essa OS.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <form onSubmit={handleEditSubmit(handleUpdateOrder)} noValidate>
-              <InputFormControl
-                control={editControl}
-                name='currentMileage'
-                label='Quilometragem atual'
-                type='number'
-              />
-              <TextareaFormControl
-                control={editControl}
-                name='customerComplaint'
-                label='Queixa do cliente'
-              />
-              <TextareaFormControl
-                control={editControl}
-                name='diagnosis'
-                label='Diagnóstico (opcional)'
-              />
-              <InputFormControl
-                control={editControl}
-                name='estimatedDeliveryDate'
-                label='Previsão de entrega (opcional)'
-                type='date'
-              />
-
-              <div className='mt-4'>
-                <Button type='submit' disabled={isUpdatingOrder}>
-                  {isUpdatingOrder ? 'Salvando...' : 'Salvar alterações'}
-                </Button>
-              </div>
-            </form>
-
-            <div>
-              <h3 className='text-[13px] font-bold'>Itens</h3>
-
-              {selectedOrder.items.length === 0 ? (
-                <p className='mt-1.5 text-[12.5px] text-text-muted'>
-                  Nenhum item adicionado ainda.
-                </p>
-              ) : (
-                <div className='mt-2 flex flex-col gap-1.5'>
-                  {selectedOrder.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className='flex items-center justify-between gap-2 rounded-[8px] border border-border px-2.5 py-2 text-[12.5px]'
-                    >
-                      <div className='min-w-0'>
-                        <p className='truncate font-semibold'>
-                          {itemNames[item.part_id ?? item.service_id ?? ''] ??
-                            'Carregando...'}
-                        </p>
-                        <p className='text-text-muted'>
-                          {item.quantity}x {formatCurrencyBRL(item.unit_price)}
-                        </p>
-                      </div>
-                      <div className='flex shrink-0 items-center gap-2'>
-                        <span className='font-mono font-semibold'>
-                          {formatCurrencyBRL(item.subtotal)}
-                        </span>
-                        <button
-                          type='button'
-                          onClick={() => setItemToRemove(item)}
-                          aria-label='Remover item'
-                          className='text-text-muted transition-colors hover:text-crit'
-                        >
-                          <Trash size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className='mt-1 flex items-center justify-between border-t border-border pt-2 text-[13px] font-bold'>
-                    <span>Total</span>
-                    <span className='font-mono'>
-                      {formatCurrencyBRL(selectedOrder.total_amount)}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <form
-                onSubmit={handleAddItemSubmit(handleAddItem)}
-                noValidate
-                className='mt-3 rounded-[9px] border border-border bg-surface-2 p-3'
-              >
-                <Controller
-                  control={addItemControl}
-                  name='type'
-                  render={({ field }) => (
-                    <SegmentedControl
-                      options={[
-                        { value: 'PART', label: 'Peça' },
-                        { value: 'SERVICE', label: 'Serviço' },
-                      ]}
-                      value={field.value}
-                      onChange={(value) => {
-                        field.onChange(value);
-                        setAddItemValue('itemId', '');
-                        setSelectedItemLabel('');
-                        setItemSearchInput('');
-                      }}
-                    />
-                  )}
-                />
-
-                <ComboboxFormControl
-                  control={addItemControl}
-                  name='itemId'
-                  label={addItemType === 'PART' ? 'Peça' : 'Serviço'}
-                  placeholder={
-                    addItemType === 'PART'
-                      ? 'Buscar peça...'
-                      : 'Buscar serviço...'
-                  }
-                  searchPlaceholder='Nome...'
-                  emptyLabel='Nenhum resultado.'
-                  options={itemOptions}
-                  searchValue={itemSearchInput}
-                  onSearchChange={setItemSearchInput}
-                  isLoading={
-                    addItemType === 'PART'
-                      ? isLoadingItemParts
-                      : isLoadingItemServices
-                  }
-                  selectedLabel={selectedItemLabel}
-                  onSelect={(option) => setSelectedItemLabel(option.label)}
-                />
-
-                <InputFormControl
-                  control={addItemControl}
-                  name='quantity'
-                  label='Quantidade'
-                  type='number'
-                  min={1}
-                />
-
-                <div className='mt-4'>
-                  <Button type='submit' variant='ghost' disabled={isAddingItem}>
-                    {isAddingItem ? 'Adicionando...' : 'Adicionar item'}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </Dialog>
-      {/* ============ FIM MODAL: DETALHES DA OS ============ */}
+      <ServiceOrderDetailsModal
+        order={selectedOrder}
+        onClose={() => setSelectedOrderId(null)}
+      />
 
       <AlertDialog
         open={cancelConfirmOrder !== null}
@@ -1184,32 +664,6 @@ export default function OrdensDeServicoPage() {
             { id: cancelConfirmOrder.id, status: 'CANCELED' },
             { onSuccess: () => setCancelConfirmOrder(null) }
           );
-        }}
-      />
-
-      <AlertDialog
-        open={itemToRemove !== null}
-        onOpenChange={(open) => !open && setItemToRemove(null)}
-        title='Remover item?'
-        description={`"${
-          itemToRemove
-            ? (itemNames[
-                itemToRemove.part_id ?? itemToRemove.service_id ?? ''
-              ] ?? 'Este item')
-            : ''
-        }" será removido da OS${
-          itemToRemove?.stock_deducted
-            ? ' — o estoque já baixado volta automaticamente'
-            : ''
-        }.`}
-        confirmLabel='Remover'
-        confirmLoadingLabel='Removendo...'
-        tone='destructive'
-        isLoading={isRemovingItem}
-        onConfirm={() => {
-          if (itemToRemove) {
-            removeItemMutate(itemToRemove);
-          }
         }}
       />
     </AppShell>

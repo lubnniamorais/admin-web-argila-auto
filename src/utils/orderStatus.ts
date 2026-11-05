@@ -1,3 +1,5 @@
+import { format } from '@formkit/tempo';
+
 // `OrderStatus` da API (ver openapi.yaml, schema ServiceOrder) — sequência
 // estrita PENDING_QUOTE -> AWAITING_APPROVAL -> APPROVED -> IN_PROGRESS ->
 // AWAITING_PART -> READY_FOR_PICKUP -> COMPLETED, mais REJECTED (só sai de
@@ -57,12 +59,13 @@ const SEQUENTIAL_STATUSES: IOrderStatus[] = [
 ];
 
 // Replica a validação que a API faz de verdade (nunca é a fonte de
-// verdade — só evita a pessoa arrastar um cartão pra uma coluna que vai
-// voltar com 400) — usado pelo Kanban de Ordens de Serviço pra desabilitar
-// colunas inválidas durante o arrasto (decisão confirmada com o usuário
-// em 02/11/2026, ver CLAUDE.md). `canCancel` reflete
-// usePermissions().canCancelServiceOrder — MECHANIC nunca pode cancelar,
-// mesmo de um status que aceitaria CANCELED pra outro papel.
+// verdade — só evita a pessoa escolher, no `<select>` "Mudar status" da
+// Lista, uma opção que a API ia rejeitar com 400) — usada em Ordens de
+// Serviço e Orçamentos pra popular as opções desse seletor. Nasceu
+// pensada pro Kanban (removido em 03/11/2026, ver CLAUDE.md), mas a lógica
+// continua a mesma, só mudou pra onde ela é consultada. `canCancel`
+// reflete usePermissions().canCancelServiceOrder — MECHANIC nunca pode
+// cancelar, mesmo de um status que aceitaria CANCELED pra outro papel.
 export function getValidNextStatuses(
   current: IOrderStatus,
   canCancel: boolean
@@ -99,4 +102,28 @@ export function getValidNextStatuses(
   }
 
   return next;
+}
+
+// Extraídas de `ordens-de-servico/index.page.tsx` em 04/11/2026, ao criar
+// `/orcamentos` — as duas telas mostram a previsão de entrega (vermelho/
+// negrito se atrasada) do mesmo jeito, então a lógica fica aqui em vez de
+// duplicada. O parâmetro aceita qualquer objeto com esses 2 campos (em
+// vez de importar `IServiceOrder` de `hooks/serviceOrders.ts`) de
+// propósito — esse hook já importa `IOrderStatus` DESTE arquivo, então
+// importar `IServiceOrder` daqui pra lá criaria um import circular.
+export function isOrderOverdue(order: {
+  estimated_delivery_date: string | null;
+  status: IOrderStatus;
+}): boolean {
+  return (
+    order.estimated_delivery_date !== null &&
+    order.status !== 'COMPLETED' &&
+    order.status !== 'CANCELED' &&
+    new Date(order.estimated_delivery_date) < new Date()
+  );
+}
+
+// "2026-11-05T00:00:00.000Z" -> "05/11".
+export function formatDeliveryDate(dateIso: string): string {
+  return format(new Date(dateIso), 'DD/MM', 'pt-BR');
 }
