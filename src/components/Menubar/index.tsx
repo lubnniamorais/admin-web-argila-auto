@@ -8,6 +8,7 @@ import {
   Package,
   Receipt,
   Users,
+  UsersThree,
 } from 'phosphor-react';
 
 import { usePermissions } from '@/utils/permissions';
@@ -47,7 +48,10 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'Conta',
-    items: [{ label: 'Configurações', href: '/configuracoes', icon: GearSix }],
+    items: [
+      { label: 'Equipe', href: '/equipe', icon: UsersThree },
+      { label: 'Configurações', href: '/configuracoes', icon: GearSix },
+    ],
   },
 ];
 
@@ -83,18 +87,28 @@ const NAV_ITEM_LABEL_CLASSNAME = 'max-[880px]:hidden';
  */
 export function Menubar() {
   const router = useRouter();
-  const { canEditWorkshop, canViewFinancials } = usePermissions();
+  const { canEditWorkshop, canViewFinancials, canManageTeam } =
+    usePermissions();
 
   // "Configurações" não tem nada pra um MECHANIC ver (dados da oficina e
   // plano/assinatura são ADMIN only, relatório financeiro é
   // ADMIN/RECEPTIONIST only — ver src/utils/permissions.ts) — some da
   // navegação pra esse papel, em vez de levar pra uma página vazia.
+  // "Equipe" é ADMIN only (canManageTeam) — gestão de equipe é mais
+  // sensível que o resto de Conta.
   const navGroups = NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter(
-      (item) =>
-        item.href !== '/configuracoes' || canEditWorkshop || canViewFinancials
-    ),
+    items: group.items.filter((item) => {
+      if (item.href === '/equipe') {
+        return canManageTeam;
+      }
+
+      if (item.href === '/configuracoes') {
+        return canEditWorkshop || canViewFinancials;
+      }
+
+      return true;
+    }),
   })).filter((group) => group.items.length > 0);
 
   return (

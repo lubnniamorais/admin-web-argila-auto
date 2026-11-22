@@ -23,6 +23,10 @@ import { IUser, useAuth } from '@/hooks/auth';
 //  - canSubmitUrgencyFeedback: PATCH /service-orders/:id/urgency-feedback
 //                        (inverso dos outros — só MECHANIC, ADMIN/
 //                        RECEPTIONIST bloqueados)
+//  - canManageTeam:      POST/PUT /users, DELETE /users/:id — só ADMIN
+//                        (mais restrito que tudo acima, dá acesso ao
+//                        sistema inteiro; controla também se o item
+//                        "Equipe" aparece no Menubar)
 export interface IPermissions {
   canManageCustomers: boolean;
   canDeleteCustomer: boolean;
@@ -32,6 +36,7 @@ export interface IPermissions {
   canCreateServiceOrder: boolean;
   canCancelServiceOrder: boolean;
   canSubmitUrgencyFeedback: boolean;
+  canManageTeam: boolean;
 }
 
 function getPermissions(role: IUser['role'] | undefined): IPermissions {
@@ -48,6 +53,7 @@ function getPermissions(role: IUser['role'] | undefined): IPermissions {
     canCreateServiceOrder: isAdmin || isReceptionist,
     canCancelServiceOrder: isAdmin || isReceptionist,
     canSubmitUrgencyFeedback: isMechanic,
+    canManageTeam: isAdmin,
   };
 }
 
