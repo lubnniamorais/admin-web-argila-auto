@@ -111,6 +111,19 @@ export function ServiceOrderDetailsModal({
     reset: resetEditForm,
   } = useForm<IEditServiceOrderFormData>({
     resolver: zodResolver(editServiceOrderSchema),
+    // Bug real corrigido em 23/11/2026, achado testando com RECEPTIONIST/
+    // MECHANIC: sem defaultValues, os campos nascem undefined (input não
+    // controlado) e só recebem valor real no useEffect logo abaixo
+    // (resetEditForm) — React avisa no console toda vez que o modal abre
+    // ("changing an uncontrolled input to be controlled"). Mesmo padrão
+    // já usado no form de criar OS (ordens-de-servico/index.page.tsx),
+    // que já tinha defaultValues desde o início.
+    defaultValues: {
+      currentMileage: '' as unknown as number,
+      customerComplaint: '',
+      diagnosis: '',
+      estimatedDeliveryDate: '',
+    },
   });
 
   useEffect(() => {
