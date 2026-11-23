@@ -1,3 +1,4 @@
+import axios from 'axios';
 import Router from 'next/router';
 import { destroyCookie, parseCookies, setCookie } from 'nookies';
 import {
@@ -109,10 +110,36 @@ const AuthProvider = ({ children }: IAuthProviderProps) => {
   // Chamada agora tanto no efeito de montagem (sessão retomada de um
   // cookie já existente) quanto logo depois de `signIn`/`signUp`
   // confirmarem o token (sessão nova).
-  const fetchAuthenticatedUser = useCallback(async () => {
-    const response = await api.get('/users/me');
+  // Bug real corrigido em 22/11/2026: GET /users/me é uma rota comum
+  // (não está na lista de isentas de verifyWorkshopSubscriptionAccess,
+  // ver api-argila-auto/CLAUDE.md) — quando a workshop está com a
+  // assinatura vencida, essa chamada sempre dava 402, e o erro subia
+  // sem tratamento nenhum até estourar dentro de signIn, deixando a
+  // pessoa travada pra sempre na tela de login (toast "assinatura
+  // pendente", sem nenhum jeito de chegar numa tela que resolvesse
+  // isso). As rotas de autogestão da própria assinatura (GET
+  // /workshops/me, POST /upgrade-to-pro, etc.) são isentas de
+  // propósito, exatamente pra oficina conseguir se desbloquear sozinha
+  // — só que a UI nunca dava a chance de usá-las. Corrigido tratando o
+  // 402 aqui dentro: não relança o erro (token continua salvo, `user`
+  // fica undefined), só avisa quem chamou que a assinatura está
+  // bloqueada (retorno `true`) pra decidir pra onde navegar (ver
+  // signIn) — qualquer outro erro (rede, 500) continua relançado
+  // normalmente.
+  const fetchAuthenticatedUser = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await api.get('/users/me');
 
-    setData({ user: response.data.user });
+      setData({ user: response.data.user });
+
+      return false;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 402) {
+        return true;
+      }
+
+      throw error;
+    }
   }, []);
 
   const signIn = useCallback(
@@ -144,9 +171,11 @@ const AuthProvider = ({ children }: IAuthProviderProps) => {
 
       api.defaults.headers.Authorization = `Bearer ${token}`;
 
-      await fetchAuthenticatedUser();
+      const isSubscriptionBlocked = await fetchAuthenticatedUser();
 
-      Router.push('/dashboard');
+      Router.push(
+        isSubscriptionBlocked ? '/assinatura-pendente' : '/dashboard'
+      );
     },
     [fetchAuthenticatedUser]
   );

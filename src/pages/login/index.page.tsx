@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AxiosError } from 'axios';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -36,18 +35,16 @@ export default function LoginPage() {
     defaultValues: { email: '', password: '' },
   });
 
+  // Bug real corrigido em 22/11/2026: antes, um 402 (assinatura vencida)
+  // em GET /users/me subia até aqui e travava a pessoa na tela de login
+  // pra sempre, sem jeito de chegar numa tela que resolvesse o bloqueio.
+  // `signIn` (ver hooks/auth.tsx) já trata o 402 internamente e navega
+  // pra `/assinatura-pendente` sozinho — o catch abaixo só sobra pra
+  // erro de credencial de verdade (401) ou falha de rede.
   async function handleSignIn({ email, password }: ILoginFormData) {
     try {
       await signIn({ email, password });
-    } catch (err) {
-      if (err instanceof AxiosError && err.response?.status === 402) {
-        toast.error('A assinatura da sua oficina está pendente.', {
-          position: 'bottom-center',
-          autoClose: 5000,
-        });
-        return;
-      }
-
+    } catch {
       toast.error('E-mail ou senha inválidos. Tente novamente.', {
         position: 'bottom-center',
         autoClose: 5000,
