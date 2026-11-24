@@ -1,3 +1,4 @@
+import { SignOut } from 'phosphor-react';
 import Link from 'next/link';
 import { ReactNode } from 'react';
 
@@ -161,7 +162,13 @@ export function AppShell({
             onClick={signOut}
             className='text-white/70 hover:text-white'
           >
-            ⏻
+            {/* Ícone real (phosphor-react) no lugar do caractere unicode
+                "⏻" que estava aqui — decisão confirmada com o usuário em
+                24/11/2026 (ícone SignOut, não Power/DoorOpen). Mesma lib
+                usada em todo o resto do Menubar/sidebar, nunca unicode/
+                emoji cru (ver CLAUDE.md, "Ícones sempre da lib
+                phosphor-react"). */}
+            <SignOut size={16} weight='bold' />
           </button>
         </div>
       </aside>
