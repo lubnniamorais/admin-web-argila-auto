@@ -1,4 +1,4 @@
-import { SignOut } from 'phosphor-react';
+import { SignOut, WifiSlash } from 'phosphor-react';
 import Link from 'next/link';
 import { ReactNode } from 'react';
 
@@ -6,6 +6,7 @@ import { Logo } from '@/components/Logo';
 import { Menubar } from '@/components/Menubar';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/hooks/auth';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useWorkshop } from '@/hooks/workshop';
 
 // Mesmo ponto de corte usado pelo Menubar (ver Menubar/index.tsx, mesma
@@ -65,6 +66,7 @@ export function AppShell({
 }: AppShellProps) {
   const { user, signOut } = useAuth();
   const { data: workshop } = useWorkshop();
+  const isOnline = useOnlineStatus();
 
   const isPro = workshop?.subscription.plan === 'PRO';
 
@@ -186,6 +188,22 @@ export function AppShell({
           </div>
 
           <div className='flex items-center gap-2.5'>
+            {/* Só aparece quando o navigator.onLine detecta a conexão
+                caída (ver hooks/useOnlineStatus.ts) — não é sobre a
+                oficina ter internet "boa", só sobre ter rede nenhuma.
+                Nesse estado, as telas que já foram abertas antes mostram
+                os últimos dados salvos (cache do TanStack Query
+                persistido em IndexedDB, ver lib/persister.ts), nunca um
+                dado inventado. */}
+            {!isOnline && (
+              <span
+                title='Sem conexão — mostrando os últimos dados carregados'
+                className='flex items-center gap-1.5 rounded-full bg-warn-soft px-2.5 py-1 text-[11.5px] font-bold text-warn'
+              >
+                <WifiSlash size={14} weight='bold' />
+                Sem conexão
+              </span>
+            )}
             <ThemeToggle />
             {actions}
           </div>
