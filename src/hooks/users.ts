@@ -23,6 +23,11 @@ export interface IUseUsersParams {
   // Texto livre — API busca por nome/e-mail (ver GET /users, parâmetro
   // searchParam).
   searchParam?: string;
+  // 'false' pra ver os usuários removidos (anonimizados) — ver switch
+  // "Mostrar removidos" em /equipe. Omitido (undefined), a API já
+  // assume 'true' sozinha (ver ACTIVE_PAGE_PER_PAGE_PARAM_DEFAULT no
+  // use-case da API) — não precisamos mandar 'true' explicitamente.
+  active?: 'false';
   // A tela /equipe é ADMIN only (ver usePermissions, canManageTeam) —
   // mesmo padrão de usePreventiveMaintenanceInsight/
   // useServiceOrdersSummary (hooks/dashboard.ts): nunca dispara a chamada
@@ -42,21 +47,25 @@ export interface IUseUsersResult {
 // Lista de usuários da equipe — mesmo racional de useCustomers (busca e
 // paginação controladas pela própria página via `params`, que entra na
 // queryKey). GET /users já filtra ?active=true por padrão (igual
-// /customers e /parts), então a lista nunca mostra usuário removido.
+// /customers e /parts) quando `active` não é informado; `active=false`
+// mostra os removidos (anonimizados) — ver switch "Mostrar removidos" em
+// /equipe.
 export function useUsers({
   page,
   perPage,
   searchParam,
+  active,
   enabled = true,
 }: IUseUsersParams) {
   return useQuery({
-    queryKey: ['users', { page, perPage, searchParam }],
+    queryKey: ['users', { page, perPage, searchParam, active }],
     queryFn: async (): Promise<IUseUsersResult> => {
       const response = await api.get('/users', {
         params: {
           page,
           perPage,
           searchParam: searchParam || undefined,
+          active,
         },
       });
 

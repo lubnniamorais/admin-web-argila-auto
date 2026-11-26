@@ -14,6 +14,7 @@ import { AlertDialog } from '@/components/Form/AlertDialog';
 import { Button, buttonClassName } from '@/components/Form/Button';
 import { InputFormControl } from '@/components/Form/InputFormControl';
 import { SelectPickerFormControl } from '@/components/Form/SelectPickerFormControl';
+import { Switch } from '@/components/Form/Switch';
 import { SwitchFormControl } from '@/components/Form/SwitchFormControl';
 import { Pagination } from '@/components/Pagination';
 import { ITeamUser, useUsers } from '@/hooks/users';
@@ -63,6 +64,20 @@ function RoleBadge({ role }: { role: ITeamUser['role'] }) {
   );
 }
 
+// Mostrado no lugar dos botões de editar/remover quando o switch "Mostrar
+// removidos" está ligado — decisão confirmada com o usuário em
+// 24/11/2026: usuário removido já vem anonimizado da API (nome/e-mail
+// substituídos, ver DeleteUserUseCase), então não tem ação nenhuma que
+// faça sentido aqui (reativar só giraria o `active` de volta pra `true`
+// sem devolver os dados reais da pessoa).
+function RemovedBadge() {
+  return (
+    <span className='inline-flex items-center rounded-full bg-neutral-soft px-2 py-0.5 text-[12px] font-semibold text-neutral-badge'>
+      Removido
+    </span>
+  );
+}
+
 export default function EquipePage() {
   const queryClient = useQueryClient();
   const { canManageTeam } = usePermissions();
@@ -71,6 +86,11 @@ export default function EquipePage() {
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [searchParam, setSearchParam] = useState('');
+  // Switch "Mostrar removidos" — liga/desliga active=false em useUsers
+  // (ver hooks/users.ts). Exclusivo com a listagem normal (a API só
+  // aceita um valor de active por chamada, nunca os dois juntos) —
+  // decisão confirmada com o usuário em 24/11/2026.
+  const [showRemoved, setShowRemoved] = useState(false);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -92,6 +112,7 @@ export default function EquipePage() {
     page,
     perPage: PER_PAGE,
     searchParam,
+    active: showRemoved ? 'false' : undefined,
     enabled: canManageTeam,
   });
   // END FUNCTIONS
@@ -324,13 +345,30 @@ export default function EquipePage() {
             </button>
           </div>
 
+          {/* Switch "Mostrar removidos" — ligar troca a listagem ativa
+              pelos usuários removidos (anonimizados), nunca mistura os
+              dois (ver comentário em showRemoved acima). */}
+          <div className='mt-3 flex w-fit items-center gap-2.5 text-[13px] text-text-muted'>
+            <Switch
+              aria-label='Mostrar removidos'
+              checked={showRemoved}
+              onCheckedChange={(checked) => {
+                setShowRemoved(checked);
+                setPage(1);
+              }}
+            />
+            Mostrar removidos
+          </div>
+
           {!usersData || usersData.users.length === 0 ? (
             <p className='mt-5 py-6 text-center text-text-muted'>
               {isLoadingUsers
                 ? 'Carregando...'
                 : searchParam
                   ? 'Nenhum usuário encontrado pra essa busca.'
-                  : 'Nenhum usuário cadastrado ainda.'}
+                  : showRemoved
+                    ? 'Nenhum usuário removido.'
+                    : 'Nenhum usuário cadastrado ainda.'}
             </p>
           ) : (
             <>
@@ -362,25 +400,29 @@ export default function EquipePage() {
                             <RoleBadge role={teamUser.role} />
                           </td>
                           <td className='py-2.5'>
-                            {canManageTeam && (
-                              <div className='flex items-center gap-3'>
-                                <button
-                                  type='button'
-                                  onClick={() => setEditingUser(teamUser)}
-                                  aria-label={`Editar ${teamUser.name}`}
-                                  className='text-text-muted transition-colors hover:text-clay'
-                                >
-                                  <Pencil size={15} />
-                                </button>
-                                <button
-                                  type='button'
-                                  onClick={() => setUserToDelete(teamUser)}
-                                  aria-label={`Remover ${teamUser.name}`}
-                                  className='text-text-muted transition-colors hover:text-crit'
-                                >
-                                  <Trash size={15} />
-                                </button>
-                              </div>
+                            {!teamUser.active ? (
+                              <RemovedBadge />
+                            ) : (
+                              canManageTeam && (
+                                <div className='flex items-center gap-3'>
+                                  <button
+                                    type='button'
+                                    onClick={() => setEditingUser(teamUser)}
+                                    aria-label={`Editar ${teamUser.name}`}
+                                    className='text-text-muted transition-colors hover:text-clay'
+                                  >
+                                    <Pencil size={15} />
+                                  </button>
+                                  <button
+                                    type='button'
+                                    onClick={() => setUserToDelete(teamUser)}
+                                    aria-label={`Remover ${teamUser.name}`}
+                                    className='text-text-muted transition-colors hover:text-crit'
+                                  >
+                                    <Trash size={15} />
+                                  </button>
+                                </div>
+                              )
                             )}
                           </td>
                         </tr>
@@ -408,25 +450,29 @@ export default function EquipePage() {
                             <RoleBadge role={teamUser.role} />
                           </div>
                         </div>
-                        {canManageTeam && (
-                          <div className='flex shrink-0 items-center gap-3'>
-                            <button
-                              type='button'
-                              onClick={() => setEditingUser(teamUser)}
-                              aria-label={`Editar ${teamUser.name}`}
-                              className='text-text-muted transition-colors hover:text-clay'
-                            >
-                              <Pencil size={15} />
-                            </button>
-                            <button
-                              type='button'
-                              onClick={() => setUserToDelete(teamUser)}
-                              aria-label={`Remover ${teamUser.name}`}
-                              className='text-text-muted transition-colors hover:text-crit'
-                            >
-                              <Trash size={15} />
-                            </button>
-                          </div>
+                        {!teamUser.active ? (
+                          <RemovedBadge />
+                        ) : (
+                          canManageTeam && (
+                            <div className='flex shrink-0 items-center gap-3'>
+                              <button
+                                type='button'
+                                onClick={() => setEditingUser(teamUser)}
+                                aria-label={`Editar ${teamUser.name}`}
+                                className='text-text-muted transition-colors hover:text-clay'
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                type='button'
+                                onClick={() => setUserToDelete(teamUser)}
+                                aria-label={`Remover ${teamUser.name}`}
+                                className='text-text-muted transition-colors hover:text-crit'
+                              >
+                                <Trash size={15} />
+                              </button>
+                            </div>
+                          )
                         )}
                       </div>
                     </div>

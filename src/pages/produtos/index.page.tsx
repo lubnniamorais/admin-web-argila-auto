@@ -16,6 +16,7 @@ import { Dialog } from '@/components/Dialog';
 import { Button, buttonClassName } from '@/components/Form/Button';
 import { InputFormControl } from '@/components/Form/InputFormControl';
 import { SelectPickerFormControl } from '@/components/Form/SelectPickerFormControl';
+import { Switch } from '@/components/Form/Switch';
 import { SwitchFormControl } from '@/components/Form/SwitchFormControl';
 import { Pagination } from '@/components/Pagination';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -203,6 +204,13 @@ export default function ProdutosPage() {
   const [partsPage, setPartsPage] = useState(1);
   const [partsSearchInput, setPartsSearchInput] = useState('');
   const [partsSearchParam, setPartsSearchParam] = useState('');
+  // Switch "Mostrar removidas" — mesmo racional de /equipe e
+  // /clientes-veiculos, exclusivo com a listagem ativa. Diferente das
+  // outras duas telas, aqui reativar funciona de verdade: o formulário
+  // de editar peça já tem o toggle `active` (ver SwitchFormControl mais
+  // abaixo), então as ações (lápis/estoque) continuam disponíveis nas
+  // peças desativadas.
+  const [partsShowRemoved, setPartsShowRemoved] = useState(false);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -217,6 +225,7 @@ export default function ProdutosPage() {
     page: partsPage,
     perPage: PER_PAGE,
     searchParam: partsSearchParam,
+    active: partsShowRemoved ? 'false' : undefined,
   });
   // END FUNCTIONS (peças)
 
@@ -802,13 +811,29 @@ export default function ProdutosPage() {
               )}
             </div>
 
+            {/* Switch "Mostrar removidas" — ligar troca a listagem ativa
+                pelas peças desativadas (active=false). */}
+            <div className='mt-3 flex w-fit items-center gap-2.5 text-[13px] text-text-muted'>
+              <Switch
+                aria-label='Mostrar removidas'
+                checked={partsShowRemoved}
+                onCheckedChange={(checked) => {
+                  setPartsShowRemoved(checked);
+                  setPartsPage(1);
+                }}
+              />
+              Mostrar removidas
+            </div>
+
             {!partsData || partsData.parts.length === 0 ? (
               <p className='mt-5 py-6 text-center text-text-muted'>
                 {isLoadingParts
                   ? 'Carregando...'
                   : partsSearchParam
                     ? 'Nenhuma peça encontrada pra essa busca.'
-                    : 'Nenhuma peça cadastrada ainda.'}
+                    : partsShowRemoved
+                      ? 'Nenhuma peça removida.'
+                      : 'Nenhuma peça cadastrada ainda.'}
               </p>
             ) : (
               <>
@@ -842,6 +867,11 @@ export default function ProdutosPage() {
                             </td>
                             <td className='py-2.5 pr-3 font-semibold'>
                               {part.name}
+                              {!part.active && (
+                                <span className='ml-2'>
+                                  <ActiveBadge active={part.active} />
+                                </span>
+                              )}
                             </td>
                             <td className='py-2.5 pr-3'>
                               <CategoryBadge>
@@ -911,7 +941,14 @@ export default function ProdutosPage() {
                       >
                         <div className='flex items-start justify-between gap-2'>
                           <div className='min-w-0'>
-                            <p className='font-semibold'>{part.name}</p>
+                            <p className='font-semibold'>
+                              {part.name}
+                              {!part.active && (
+                                <span className='ml-2'>
+                                  <ActiveBadge active={part.active} />
+                                </span>
+                              )}
+                            </p>
                             <p className='mt-0.5 font-mono text-[12.5px] text-text-muted'>
                               {part.sku}
                             </p>

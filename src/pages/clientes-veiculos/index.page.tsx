@@ -14,6 +14,7 @@ import { AlertDialog } from '@/components/Form/AlertDialog';
 import { Button, buttonClassName } from '@/components/Form/Button';
 import { InputFormControl } from '@/components/Form/InputFormControl';
 import { InputMaskFormControl } from '@/components/Form/InputMaskFormControl';
+import { Switch } from '@/components/Form/Switch';
 import { Pagination } from '@/components/Pagination';
 import { ICustomer, ICustomerVehicle, useCustomers } from '@/hooks/customers';
 import { api } from '@/lib/apiClient';
@@ -235,6 +236,20 @@ function formatPhone(phone: string | null): string {
   return phone;
 }
 
+// Mostrado no lugar dos botões de editar/excluir quando o switch "Mostrar
+// removidos" está ligado — decisão confirmada com o usuário em
+// 24/11/2026: cliente removido já vem anonimizado da API (nome/documento/
+// e-mail/telefone/endereço substituídos ou nulos, ver "Exclusão de
+// cliente" no CLAUDE.md da API), e PUT /customers nem aceita `active` —
+// não tem nenhuma ação possível aqui, só visualização.
+function RemovedBadge() {
+  return (
+    <span className='inline-flex items-center rounded-full bg-neutral-soft px-2 py-0.5 text-[12px] font-semibold text-neutral-badge'>
+      Removido
+    </span>
+  );
+}
+
 // ============ LISTA DE VEÍCULOS DO CLIENTE ============
 // Compartilhado entre a tabela (telas largas) e os cards (telas
 // estreitas, ver "CARDS (TELAS ESTREITAS)" mais abaixo) — mesmo bloco
@@ -312,6 +327,9 @@ export default function ClientesVeiculosPage() {
   // API — ver useEffect abaixo.
   const [searchInput, setSearchInput] = useState('');
   const [searchParam, setSearchParam] = useState('');
+  // Switch "Mostrar removidos" — mesmo racional de /equipe: exclusivo
+  // com a listagem ativa, a API só aceita um valor de `active` por vez.
+  const [showRemoved, setShowRemoved] = useState(false);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -329,6 +347,7 @@ export default function ClientesVeiculosPage() {
     page,
     perPage: PER_PAGE,
     searchParam,
+    active: showRemoved ? 'false' : undefined,
   });
   // END FUNCTIONS
 
@@ -878,7 +897,7 @@ export default function ClientesVeiculosPage() {
   // (com CTA de cadastro) no primeiro caso; o segundo mostra uma
   // mensagem simples dentro da própria tabela.
   const isTrulyEmpty =
-    !isLoading && data?.totalCount === 0 && searchParam === '';
+    !isLoading && data?.totalCount === 0 && searchParam === '' && !showRemoved;
 
   return (
     <AppShell
@@ -888,6 +907,28 @@ export default function ClientesVeiculosPage() {
       <Head>
         <title>Clientes & Veículos | ArgilaAuto</title>
       </Head>
+
+      {/* Switch "Mostrar removidos" — fica FORA do `isTrulyEmpty ? ... :
+          ...` de propósito (bug real encontrado testando: com 0 clientes
+          ativos, a tela cai no card de boas-vindas, que não tem switch
+          nenhum — sem isso, não haveria como alcançar os clientes
+          removidos quando não sobra nenhum cliente ativo). Sempre visível
+          pros 3 papéis (só criar/editar/excluir são restritos, listar
+          não). Ligar troca `isTrulyEmpty` pra `false` (ver sua definição
+          abaixo, `&& !showRemoved`), revelando a lista normal — que
+          busca `active=false` e mostra "Nenhum cliente removido." se não
+          houver nenhum. */}
+      <div className='mb-3 flex w-fit items-center gap-2.5 text-[13px] text-text-muted'>
+        <Switch
+          aria-label='Mostrar removidos'
+          checked={showRemoved}
+          onCheckedChange={(checked) => {
+            setShowRemoved(checked);
+            setPage(1);
+          }}
+        />
+        Mostrar removidos
+      </div>
 
       {isTrulyEmpty ? (
         <div className='rounded-[10px] border border-border bg-surface p-10 text-center shadow-[0_1px_2px_rgba(43,36,32,0.06),0_8px_24px_-12px_rgba(43,36,32,0.14)]'>
@@ -950,7 +991,9 @@ export default function ClientesVeiculosPage() {
             <p className='mt-5 py-6 text-center text-text-muted'>
               {isLoading
                 ? 'Carregando...'
-                : 'Nenhum cliente encontrado pra essa busca.'}
+                : showRemoved
+                  ? 'Nenhum cliente removido.'
+                  : 'Nenhum cliente encontrado pra essa busca.'}
             </p>
           ) : (
             <>
@@ -1009,28 +1052,32 @@ export default function ClientesVeiculosPage() {
                           />
                         </td>
                         <td className='py-2.5'>
-                          <div className='flex items-center gap-3'>
-                            {canManageCustomers && (
-                              <button
-                                type='button'
-                                onClick={() => setEditingCustomer(customer)}
-                                aria-label={`Editar ${customer.name}`}
-                                className='text-text-muted transition-colors hover:text-clay'
-                              >
-                                <Pencil size={15} />
-                              </button>
-                            )}
-                            {canDeleteCustomer && (
-                              <button
-                                type='button'
-                                onClick={() => setCustomerToDelete(customer)}
-                                aria-label={`Excluir ${customer.name}`}
-                                className='text-text-muted transition-colors hover:text-crit'
-                              >
-                                <Trash size={15} />
-                              </button>
-                            )}
-                          </div>
+                          {!customer.active ? (
+                            <RemovedBadge />
+                          ) : (
+                            <div className='flex items-center gap-3'>
+                              {canManageCustomers && (
+                                <button
+                                  type='button'
+                                  onClick={() => setEditingCustomer(customer)}
+                                  aria-label={`Editar ${customer.name}`}
+                                  className='text-text-muted transition-colors hover:text-clay'
+                                >
+                                  <Pencil size={15} />
+                                </button>
+                              )}
+                              {canDeleteCustomer && (
+                                <button
+                                  type='button'
+                                  onClick={() => setCustomerToDelete(customer)}
+                                  aria-label={`Excluir ${customer.name}`}
+                                  className='text-text-muted transition-colors hover:text-crit'
+                                >
+                                  <Trash size={15} />
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1059,28 +1106,32 @@ export default function ClientesVeiculosPage() {
                           {formatPhone(customer.phone)}
                         </p>
                       </div>
-                      <div className='flex shrink-0 items-center gap-3'>
-                        {canManageCustomers && (
-                          <button
-                            type='button'
-                            onClick={() => setEditingCustomer(customer)}
-                            aria-label={`Editar ${customer.name}`}
-                            className='text-text-muted transition-colors hover:text-clay'
-                          >
-                            <Pencil size={15} />
-                          </button>
-                        )}
-                        {canDeleteCustomer && (
-                          <button
-                            type='button'
-                            onClick={() => setCustomerToDelete(customer)}
-                            aria-label={`Excluir ${customer.name}`}
-                            className='text-text-muted transition-colors hover:text-crit'
-                          >
-                            <Trash size={15} />
-                          </button>
-                        )}
-                      </div>
+                      {!customer.active ? (
+                        <RemovedBadge />
+                      ) : (
+                        <div className='flex shrink-0 items-center gap-3'>
+                          {canManageCustomers && (
+                            <button
+                              type='button'
+                              onClick={() => setEditingCustomer(customer)}
+                              aria-label={`Editar ${customer.name}`}
+                              className='text-text-muted transition-colors hover:text-clay'
+                            >
+                              <Pencil size={15} />
+                            </button>
+                          )}
+                          {canDeleteCustomer && (
+                            <button
+                              type='button'
+                              onClick={() => setCustomerToDelete(customer)}
+                              aria-label={`Excluir ${customer.name}`}
+                              className='text-text-muted transition-colors hover:text-crit'
+                            >
+                              <Trash size={15} />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className='mt-3 border-t border-border pt-3'>

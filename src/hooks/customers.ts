@@ -55,8 +55,8 @@ export interface ICustomer {
   name: string;
   // `null` quando o cliente foi excluído mas tinha histórico de OS
   // (anonimizado em vez de apagado de verdade — ver `active` abaixo).
-  // Na prática não aparece na listagem padrão (GET /customers só traz
-  // `active:true` por padrão), mas o tipo reflete o schema real.
+  // Só aparece na listagem padrão com o switch "Mostrar removidos"
+  // ligado (ver /clientes-veiculos, `active=false` em useCustomers).
   document: string | null;
   email: string | null;
   phone: string | null;
@@ -78,6 +78,10 @@ export interface IUseCustomersParams {
   // Texto livre — API busca por nome/documento/etc (ver GET /customers,
   // parâmetro `searchParam`).
   searchParam?: string;
+  // 'false' pra ver os clientes removidos (anonimizados) — ver switch
+  // "Mostrar removidos" em /clientes-veiculos. Omitido, a API assume
+  // 'true' sozinha (mesmo padrão de /parts e /users).
+  active?: 'false';
 }
 
 export interface IUseCustomersResult {
@@ -96,9 +100,10 @@ export function useCustomers({
   page,
   perPage,
   searchParam,
+  active,
 }: IUseCustomersParams) {
   return useQuery({
-    queryKey: ['customers', { page, perPage, searchParam }],
+    queryKey: ['customers', { page, perPage, searchParam, active }],
     queryFn: async (): Promise<IUseCustomersResult> => {
       const response = await api.get('/customers', {
         params: {
@@ -107,6 +112,7 @@ export function useCustomers({
           // Query vazia manda `searchParam=''` pra API à toa — melhor
           // nem mandar o parâmetro quando não há busca nenhuma.
           searchParam: searchParam || undefined,
+          active,
         },
       });
 
