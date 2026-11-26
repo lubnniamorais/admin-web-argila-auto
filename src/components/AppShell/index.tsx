@@ -1,7 +1,8 @@
 import { SignOut, WifiSlash } from 'phosphor-react';
 import Link from 'next/link';
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 
+import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 import { Logo } from '@/components/Logo';
 import { Menubar } from '@/components/Menubar';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -67,6 +68,8 @@ export function AppShell({
   const { user, signOut } = useAuth();
   const { data: workshop } = useWorkshop();
   const isOnline = useOnlineStatus();
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] =
+    useState(false);
 
   const isPro = workshop?.subscription.plan === 'PRO';
 
@@ -147,17 +150,29 @@ export function AppShell({
             (igual ao protótipo: .who { display:none }) e centraliza
             avatar + botão de sair. */}
         <div className='flex items-center gap-2.5 border-t border-white/15 pt-3 max-[880px]:justify-center'>
-          <div className='flex h-7 w-7 flex-none items-center justify-center rounded-full bg-white/15 text-[11px] font-bold text-white'>
-            {user ? getInitials(user.name) : '—'}
-          </div>
-          <div className='min-w-0 flex-1 leading-tight max-[880px]:hidden'>
-            <div className='truncate text-[13px] font-bold text-white'>
-              {user?.name ?? '—'}
+          {/* Clicar no avatar/nome abre o modal de trocar senha — decisão
+              confirmada com o usuário em 24/11/2026 (sem ícone novo, o
+              próprio bloco que já existia vira o gatilho). <button> em
+              vez de <div> por semântica/acessibilidade (mesmo motivo do
+              card de mobile em ordens-de-servico, ver CLAUDE.md). */}
+          <button
+            type='button'
+            title='Trocar senha'
+            onClick={() => setIsChangePasswordModalOpen(true)}
+            className='-m-1 flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1 text-left transition-colors hover:bg-white/10 max-[880px]:flex-none max-[880px]:justify-center'
+          >
+            <div className='flex h-7 w-7 flex-none items-center justify-center rounded-full bg-white/15 text-[11px] font-bold text-white'>
+              {user ? getInitials(user.name) : '—'}
             </div>
-            <div className='text-[11.5px] text-white/60'>
-              {user ? ROLE_LABEL[user.role] : '—'}
+            <div className='min-w-0 flex-1 leading-tight max-[880px]:hidden'>
+              <div className='truncate text-[13px] font-bold text-white'>
+                {user?.name ?? '—'}
+              </div>
+              <div className='text-[11.5px] text-white/60'>
+                {user ? ROLE_LABEL[user.role] : '—'}
+              </div>
             </div>
-          </div>
+          </button>
           <button
             type='button'
             title='Sair'
@@ -174,6 +189,11 @@ export function AppShell({
           </button>
         </div>
       </aside>
+
+      <ChangePasswordModal
+        open={isChangePasswordModalOpen}
+        onOpenChange={setIsChangePasswordModalOpen}
+      />
 
       {/* ===== CONTEÚDO ===== */}
       <main className='flex min-w-0 flex-1 flex-col'>
