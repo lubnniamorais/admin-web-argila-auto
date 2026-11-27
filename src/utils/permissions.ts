@@ -35,6 +35,14 @@ import { IUser, useAuth } from '@/hooks/auth';
 //                        pagamentos (GET) não tem restrição nenhuma — os
 //                        3 papéis veem o histórico, só a ação de
 //                        registrar/confirmar/cancelar é que soma.
+//  - canManageChecklistPhotos: POST/DELETE
+//                        /service-orders/:id/checklist-photos(/:photoId)
+//                        — mesmo papel de canManagePayments
+//                        (ADMIN/RECEPTIONIST), separado por ser outra
+//                        ação de verdade diferente (upload/exclusão de
+//                        arquivo). Listar fotos (GET) não tem restrição
+//                        nenhuma — os 3 papéis veem as fotos, só
+//                        registrar/apagar é que soma.
 export interface IPermissions {
   canManageCustomers: boolean;
   canDeleteCustomer: boolean;
@@ -46,6 +54,7 @@ export interface IPermissions {
   canSubmitUrgencyFeedback: boolean;
   canManageTeam: boolean;
   canManagePayments: boolean;
+  canManageChecklistPhotos: boolean;
 }
 
 function getPermissions(role: IUser['role'] | undefined): IPermissions {
@@ -64,6 +73,7 @@ function getPermissions(role: IUser['role'] | undefined): IPermissions {
     canSubmitUrgencyFeedback: isMechanic,
     canManageTeam: isAdmin,
     canManagePayments: isAdmin || isReceptionist,
+    canManageChecklistPhotos: isAdmin || isReceptionist,
   };
 }
 

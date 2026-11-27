@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { Sparkle, Trash } from 'phosphor-react';
-import { useEffect, useState } from 'react';
+import { ChangeEvent, useEffect, useState } from 'react';
 import { Controller, SubmitHandler, useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { z as zod } from 'zod';
@@ -17,6 +17,10 @@ import { SelectPickerFormControl } from '@/components/Form/SelectPickerFormContr
 import { Textarea } from '@/components/Form/Textarea';
 import { TextareaFormControl } from '@/components/Form/TextareaFormControl';
 import { SegmentedControl } from '@/components/SegmentedControl';
+import {
+  IServiceOrderChecklistPhoto,
+  useServiceOrderChecklistPhotos,
+} from '@/hooks/serviceOrderChecklistPhotos';
 import { IPart, useParts } from '@/hooks/parts';
 import {
   IServiceOrderPayment,
@@ -31,6 +35,13 @@ import {
 } from '@/hooks/serviceOrders';
 import { useWorkshop } from '@/hooks/workshop';
 import { api } from '@/lib/apiClient';
+import {
+  CHECKLIST_PHASE_LABEL,
+  CHECKLIST_PHOTO_CATEGORY_LABEL,
+  CHECKLIST_PHOTO_CATEGORY_OPTIONS,
+  CHECKLIST_PHOTO_CATEGORY_VALUES,
+  IChecklistPhase,
+} from '@/utils/checklistPhoto';
 import {
   ORDER_STATUS_BADGE_CLASSNAME,
   ORDER_STATUS_LABEL,
@@ -104,6 +115,28 @@ const registerPaymentSchema = zod.object({
 type IRegisterPaymentFormData = zod.infer<typeof registerPaymentSchema>;
 // ============ FIM SCHEMA: REGISTRAR PAGAMENTO ============
 
+// ============ SCHEMA: REGISTRAR FOTO DE CHECKLIST (POST .../checklist-photos) ============
+// `phase` fica fora do schema de propósito — é a aba selecionada
+// (Entrada/Saída) no momento do envio, não um campo do formulário (ver
+// `checklistPhase` no componente). O arquivo em si também fica fora do
+// schema do RHF — mesmo padrão já usado no admin-web-amip (museus/criar):
+// estado local (`selectedFile`) em vez de `register`/`Controller`, já que
+// nenhum componente deste projeto sabe lidar com `<input type='file'>`
+// controlado ainda (primeiro upload de arquivo do projeto).
+const ALLOWED_PHOTO_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024;
+
+const uploadChecklistPhotoSchema = zod.object({
+  category: zod.enum(CHECKLIST_PHOTO_CATEGORY_VALUES, {
+    message: 'Selecione a categoria',
+  }),
+  caption: zod.string().optional(),
+});
+type IUploadChecklistPhotoFormData = zod.infer<
+  typeof uploadChecklistPhotoSchema
+>;
+// ============ FIM SCHEMA: REGISTRAR FOTO DE CHECKLIST ============
+
 interface IServiceOrderDetailsModalProps {
   order: IServiceOrder | null;
   onClose: () => void;
@@ -130,7 +163,11 @@ export function ServiceOrderDetailsModal({
   const queryClient = useQueryClient();
   const { data: workshop } = useWorkshop();
   const isPro = workshop?.subscription.plan === 'PRO';
-  const { canSubmitUrgencyFeedback, canManagePayments } = usePermissions();
+  const {
+    canSubmitUrgencyFeedback,
+    canManagePayments,
+    canManageChecklistPhotos,
+  } = usePermissions();
 
   // FUNCTIONS (editar dados da OS)
   const {
@@ -503,6 +540,168 @@ export function ServiceOrderDetailsModal({
     });
   // END FUNCTIONS (pagamentos)
 
+  // FUNCTIONS (fotos de checklist)
+  // Sem checagem de role pra LISTAR (GET .../checklist-photos) — os 3
+  // papéis veem as fotos, igual à API. canManageChecklistPhotos só
+  // controla as ações (registrar/apagar), ver utils/permissions.ts.
+  const [checklistPhase, setChecklistPhase] =
+    useState<IChecklistPhase>('CHECK_IN');
+  const { data: checklistPhotos } = useServiceOrderChecklistPhotos(
+    order?.id,
+    checklistPhase
+  );
+
+  useEffect(() => {
+    setChecklistPhase('CHECK_IN');
+  }, [order?.id]);
+
+  function getChecklistPhotoUrl(photo: IServiceOrderChecklistPhoto): string {
+    return `${process.env.NEXT_PUBLIC_API_URL}${photo.photo_url}`;
+  }
+
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
+  // Força o <input type='file'> a remontar (limpo) depois de um upload
+  // com sucesso — React não controla `value` de input de arquivo por
+  // segurança do navegador, então trocar a `key` é o jeito padrão de
+  // "resetar" sem precisar de ref.
+  const [photoFileInputKey, setPhotoFileInputKey] = useState(0);
+
+  function handleSelectPhotoFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+
+    if (file && !ALLOWED_PHOTO_MIME_TYPES.includes(file.type)) {
+      toast.error(
+        'Tipo de arquivo não aceito. Envie uma imagem JPEG, PNG ou WEBP.'
+      );
+      setSelectedPhotoFile(null);
+      setPhotoFileInputKey((key) => key + 1);
+      return;
+    }
+
+    if (file && file.size > MAX_PHOTO_SIZE_BYTES) {
+      toast.error('Arquivo maior que 5MB.');
+      setSelectedPhotoFile(null);
+      setPhotoFileInputKey((key) => key + 1);
+      return;
+    }
+
+    setSelectedPhotoFile(file);
+  }
+
+  const {
+    control: uploadPhotoControl,
+    handleSubmit: handleUploadPhotoSubmit,
+    reset: resetUploadPhotoForm,
+  } = useForm<IUploadChecklistPhotoFormData>({
+    resolver: zodResolver(uploadChecklistPhotoSchema),
+    defaultValues: {
+      // '' força escolha ativa — mesmo truque de cast já usado pro campo
+      // de forma de pagamento acima.
+      category: '' as unknown as IUploadChecklistPhotoFormData['category'],
+      caption: '',
+    },
+  });
+
+  const { mutateAsync: uploadPhotoMutate, isPending: isUploadingPhoto } =
+    useMutation({
+      mutationFn: async (formData: IUploadChecklistPhotoFormData) => {
+        if (!order) {
+          throw new Error('Nenhuma OS selecionada.');
+        }
+
+        if (!selectedPhotoFile) {
+          throw new Error('Nenhuma foto selecionada.');
+        }
+
+        const payload = new FormData();
+        payload.append('phase', checklistPhase);
+        payload.append('category', formData.category);
+        if (formData.caption) {
+          payload.append('caption', formData.caption);
+        }
+        payload.append('photo', selectedPhotoFile);
+
+        await api.post(
+          `/service-orders/${order.id}/checklist-photos`,
+          payload,
+          { headers: { 'Content-Type': 'multipart/form-data' } }
+        );
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: ['service-order-checklist-photos', order?.id],
+        });
+        toast.success('Foto registrada.');
+      },
+      onError: (error) => {
+        // Os dois 400 alcançáveis por aqui (tipo/tamanho inválido) já são
+        // bloqueados na validação do próprio input (handleSelectPhotoFile)
+        // — este fallback é só pra algo inesperado passar por eles mesmo
+        // assim (ex.: arquivo corrompido). Mensagem própria em vez da
+        // mensagem crua da API (ver CLAUDE.md).
+        if (axios.isAxiosError(error) && error.response?.status === 400) {
+          toast.error(
+            'Não foi possível enviar a foto — confira o tipo (JPEG/PNG/WEBP) e o tamanho (até 5MB).'
+          );
+          return;
+        }
+
+        toast.error('Não foi possível registrar a foto.');
+      },
+    });
+
+  const handleUploadPhoto: SubmitHandler<
+    IUploadChecklistPhotoFormData
+  > = async (formData) => {
+    if (!selectedPhotoFile) {
+      toast.error('Selecione uma foto.');
+      return;
+    }
+
+    try {
+      await uploadPhotoMutate(formData);
+      resetUploadPhotoForm({
+        category: '' as unknown as IUploadChecklistPhotoFormData['category'],
+        caption: '',
+      });
+      setSelectedPhotoFile(null);
+      setPhotoFileInputKey((key) => key + 1);
+    } catch {
+      // erro já tratado no onError da mutation acima.
+    }
+  };
+
+  // Apagar foto PEDE confirmação — mesmo padrão de qualquer ação
+  // destrutiva do projeto (remover item, excluir cliente, cancelar/
+  // estornar pagamento).
+  const [photoToDelete, setPhotoToDelete] =
+    useState<IServiceOrderChecklistPhoto | null>(null);
+
+  const { mutate: deletePhotoMutate, isPending: isDeletingPhoto } = useMutation(
+    {
+      mutationFn: async () => {
+        if (!order || !photoToDelete) {
+          throw new Error('Nenhuma foto selecionada.');
+        }
+
+        await api.delete(
+          `/service-orders/${order.id}/checklist-photos/${photoToDelete.id}`
+        );
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: ['service-order-checklist-photos', order?.id],
+        });
+        toast.success('Foto apagada.');
+        setPhotoToDelete(null);
+      },
+      onError: () => {
+        toast.error('Não foi possível apagar a foto.');
+      },
+    }
+  );
+  // END FUNCTIONS (fotos de checklist)
+
   return (
     <>
       <Dialog
@@ -866,6 +1065,115 @@ export function ServiceOrderDetailsModal({
                   </form>
                 ))}
             </div>
+
+            <div>
+              <h3 className='text-[13px] font-bold'>Fotos do checklist</h3>
+
+              <div className='mt-2'>
+                <SegmentedControl
+                  options={[
+                    { value: 'CHECK_IN', label: 'Entrada' },
+                    { value: 'CHECK_OUT', label: 'Saída' },
+                  ]}
+                  value={checklistPhase}
+                  onChange={setChecklistPhase}
+                />
+              </div>
+
+              {!checklistPhotos || checklistPhotos.length === 0 ? (
+                <p className='mt-2 text-[12.5px] text-text-muted'>
+                  Nenhuma foto de{' '}
+                  {CHECKLIST_PHASE_LABEL[checklistPhase].toLowerCase()}{' '}
+                  registrada ainda.
+                </p>
+              ) : (
+                <div className='mt-2 grid grid-cols-3 gap-2'>
+                  {checklistPhotos.map((photo) => (
+                    <div
+                      key={photo.id}
+                      className='relative overflow-hidden rounded-lg border border-border'
+                    >
+                      <a
+                        href={getChecklistPhotoUrl(photo)}
+                        target='_blank'
+                        rel='noreferrer'
+                      >
+                        {/* biome-ignore lint/performance/noImgElement: next/image com style custom já deu hydration mismatch nesta base (ver CLAUDE.md, pegadinha #2) — plain <img> pra um grid de thumbnails simples. */}
+                        <img
+                          src={getChecklistPhotoUrl(photo)}
+                          alt={CHECKLIST_PHOTO_CATEGORY_LABEL[photo.category]}
+                          className='aspect-square w-full object-cover'
+                        />
+                      </a>
+                      <div className='absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-black/60 px-1.5 py-1'>
+                        <span className='truncate text-[10.5px] font-semibold text-white'>
+                          {CHECKLIST_PHOTO_CATEGORY_LABEL[photo.category]}
+                        </span>
+                        {canManageChecklistPhotos && (
+                          <button
+                            type='button'
+                            onClick={() => setPhotoToDelete(photo)}
+                            aria-label='Apagar foto'
+                            className='shrink-0 text-white transition-colors hover:text-crit'
+                          >
+                            <Trash size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {canManageChecklistPhotos && (
+                <form
+                  onSubmit={handleUploadPhotoSubmit(handleUploadPhoto)}
+                  noValidate
+                  className='mt-3 rounded-[9px] border border-border bg-surface-2 p-3'
+                >
+                  <SelectPickerFormControl
+                    control={uploadPhotoControl}
+                    name='category'
+                    label='Categoria'
+                    placeholder='Selecione'
+                    data={CHECKLIST_PHOTO_CATEGORY_OPTIONS}
+                  />
+
+                  <InputFormControl
+                    control={uploadPhotoControl}
+                    name='caption'
+                    label='Legenda (opcional)'
+                  />
+
+                  <div className='mt-3'>
+                    <label
+                      htmlFor='checklist-photo-file'
+                      className='mb-1.5 block text-[12.5px] font-semibold text-text'
+                    >
+                      Foto ({CHECKLIST_PHASE_LABEL[checklistPhase]})
+                    </label>
+                    <input
+                      id='checklist-photo-file'
+                      key={photoFileInputKey}
+                      type='file'
+                      accept='image/jpeg,image/png,image/webp'
+                      onChange={handleSelectPhotoFile}
+                      className='block w-full text-[12.5px] text-text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-clay file:px-3 file:py-1.5 file:text-[12.5px] file:font-bold file:text-white'
+                    />
+                  </div>
+
+                  <div className='mt-4'>
+                    <Button
+                      type='submit'
+                      variant='ghost'
+                      disabled={isUploadingPhoto}
+                    >
+                      {isUploadingPhoto ? 'Enviando...' : 'Registrar foto'}
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
         )}
       </Dialog>
@@ -938,6 +1246,22 @@ export function ServiceOrderDetailsModal({
           placeholder='Só pra auditoria financeira'
         />
       </AlertDialog>
+
+      <AlertDialog
+        open={photoToDelete !== null}
+        onOpenChange={(open) => !open && setPhotoToDelete(null)}
+        title='Apagar foto?'
+        description={
+          photoToDelete
+            ? `Foto de "${CHECKLIST_PHOTO_CATEGORY_LABEL[photoToDelete.category]}" (${CHECKLIST_PHASE_LABEL[photoToDelete.phase]}) será apagada do checklist.`
+            : ''
+        }
+        tone='destructive'
+        confirmLabel='Apagar'
+        confirmLoadingLabel='Apagando...'
+        isLoading={isDeletingPhoto}
+        onConfirm={() => deletePhotoMutate()}
+      />
     </>
   );
 }
