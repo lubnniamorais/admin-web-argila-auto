@@ -13,9 +13,15 @@ import { Button } from '@/components/Form/Button';
 import { IComboboxOption } from '@/components/Form/Combobox';
 import { ComboboxFormControl } from '@/components/Form/ComboboxFormControl';
 import { InputFormControl } from '@/components/Form/InputFormControl';
+import { SelectPickerFormControl } from '@/components/Form/SelectPickerFormControl';
+import { Textarea } from '@/components/Form/Textarea';
 import { TextareaFormControl } from '@/components/Form/TextareaFormControl';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { IPart, useParts } from '@/hooks/parts';
+import {
+  IServiceOrderPayment,
+  useServiceOrderPayments,
+} from '@/hooks/serviceOrderPayments';
 import { IService, useServices } from '@/hooks/services';
 import {
   IServiceOrder,
@@ -29,6 +35,15 @@ import {
   ORDER_STATUS_BADGE_CLASSNAME,
   ORDER_STATUS_LABEL,
 } from '@/utils/orderStatus';
+import {
+  PAYMENT_METHOD_LABEL,
+  PAYMENT_METHOD_OPTIONS,
+  PAYMENT_METHOD_VALUES,
+} from '@/utils/paymentMethod';
+import {
+  PAYMENT_STATUS_BADGE_CLASSNAME,
+  PAYMENT_STATUS_LABEL,
+} from '@/utils/paymentStatus';
 import { usePermissions } from '@/utils/permissions';
 import {
   URGENCY_LEVEL_BADGE_CLASSNAME,
@@ -76,6 +91,19 @@ const addItemSchema = zod.object({
 });
 type IAddItemFormData = zod.infer<typeof addItemSchema>;
 
+// ============ SCHEMA: REGISTRAR PAGAMENTO (POST .../payments) ============
+const registerPaymentSchema = zod.object({
+  amount: requiredCoercedNumber('Valor é obrigatório').refine(
+    (value) => value > 0,
+    'Valor precisa ser maior que zero'
+  ),
+  paymentMethod: zod.enum(PAYMENT_METHOD_VALUES, {
+    message: 'Selecione a forma de pagamento',
+  }),
+});
+type IRegisterPaymentFormData = zod.infer<typeof registerPaymentSchema>;
+// ============ FIM SCHEMA: REGISTRAR PAGAMENTO ============
+
 interface IServiceOrderDetailsModalProps {
   order: IServiceOrder | null;
   onClose: () => void;
@@ -102,7 +130,7 @@ export function ServiceOrderDetailsModal({
   const queryClient = useQueryClient();
   const { data: workshop } = useWorkshop();
   const isPro = workshop?.subscription.plan === 'PRO';
-  const { canSubmitUrgencyFeedback } = usePermissions();
+  const { canSubmitUrgencyFeedback, canManagePayments } = usePermissions();
 
   // FUNCTIONS (editar dados da OS)
   const {
@@ -322,6 +350,158 @@ export function ServiceOrderDetailsModal({
     },
   });
   // END FUNCTIONS (urgência por IA)
+
+  // FUNCTIONS (pagamentos)
+  // Sem checagem de role pra LISTAR (GET .../payments) — os 3 papéis
+  // veem o histórico, igual à API. canManagePayments só controla as
+  // ações (registrar/confirmar/cancelar), ver utils/permissions.ts.
+  const { data: payments } = useServiceOrderPayments(order?.id);
+
+  // Saldo devedor calculado no front a partir do total da OS (itens) e
+  // da soma dos pagamentos NÃO-cancelados — a API não devolve esse
+  // cálculo pronto (ver GET .../payments no openapi.yaml, "sem cálculo
+  // de saldo devedor na resposta"). Usado tanto pro resumo quanto pra
+  // montar a mensagem de erro de "valor maior que o saldo devedor" sem
+  // mostrar a mensagem crua da API (ver CLAUDE.md).
+  const paidAmount = (payments ?? [])
+    .filter((payment) => payment.status !== 'CANCELED')
+    .reduce((sum, payment) => sum + payment.amount, 0);
+  const remainingBalance = order ? order.total_amount - paidAmount : 0;
+
+  const {
+    control: paymentControl,
+    handleSubmit: handleRegisterPaymentSubmit,
+    reset: resetPaymentForm,
+  } = useForm<IRegisterPaymentFormData>({
+    resolver: zodResolver(registerPaymentSchema),
+    defaultValues: {
+      amount: '' as unknown as number,
+      // '' força escolha ativa — mesmo truque de cast já usado pro campo
+      // de papel em /equipe (nenhuma forma de pagamento é "mais
+      // provável" o suficiente pra vir pré-selecionada).
+      paymentMethod: '' as unknown as IRegisterPaymentFormData['paymentMethod'],
+    },
+  });
+
+  const {
+    mutateAsync: registerPaymentMutate,
+    isPending: isRegisteringPayment,
+  } = useMutation({
+    mutationFn: async ({ amount, paymentMethod }: IRegisterPaymentFormData) => {
+      if (!order) {
+        throw new Error('Nenhuma OS selecionada.');
+      }
+
+      await api.post(`/service-orders/${order.id}/payments`, {
+        amount,
+        paymentMethod,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['service-order-payments', order?.id],
+      });
+      toast.success('Pagamento registrado.');
+    },
+    onError: (error) => {
+      // O único 400 alcançável por aqui é o de saldo devedor — o de "OS
+      // cancelada" nunca acontece, porque o formulário já some nesse
+      // caso (ver JSX abaixo). Mensagem própria com o valor certo em
+      // vez da mensagem crua da API (ver CLAUDE.md).
+      if (axios.isAxiosError(error) && error.response?.status === 400) {
+        toast.error(
+          `O valor informado é maior que o saldo devedor (${formatCurrencyBRL(remainingBalance)}).`
+        );
+        return;
+      }
+
+      toast.error('Não foi possível registrar o pagamento.');
+    },
+  });
+
+  const handleRegisterPayment: SubmitHandler<IRegisterPaymentFormData> = async (
+    formData
+  ) => {
+    try {
+      await registerPaymentMutate(formData);
+      resetPaymentForm({
+        amount: '' as unknown as number,
+        paymentMethod:
+          '' as unknown as IRegisterPaymentFormData['paymentMethod'],
+      });
+    } catch {
+      // erro já tratado no onError da mutation acima.
+    }
+  };
+
+  // Confirmar (PENDING → PAID) é ação direta, sem AlertDialog — decisão
+  // confirmada com o usuário: não é destrutiva, só avança o pagamento,
+  // mesmo racional de mudar o status da OS pelo seletor (sem popup).
+  // `variables` guarda o pagamento em voo, pra desabilitar só o botão
+  // daquela linha (não a lista inteira) enquanto a chamada está em voo.
+  const {
+    mutate: confirmPaymentMutate,
+    isPending: isConfirmingPayment,
+    variables: confirmingPayment,
+  } = useMutation({
+    mutationFn: async (payment: IServiceOrderPayment) => {
+      if (!order) {
+        throw new Error('Nenhuma OS selecionada.');
+      }
+
+      await api.post(
+        `/service-orders/${order.id}/payments/${payment.id}/confirm`
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['service-order-payments', order?.id],
+      });
+      toast.success('Pagamento confirmado.');
+    },
+    onError: () => {
+      toast.error('Não foi possível confirmar o pagamento.');
+    },
+  });
+
+  // Cancelar/estornar (→ CANCELED) PEDE confirmação — decisão confirmada
+  // com o usuário, mesmo padrão de ação destrutiva (remover item, excluir
+  // cliente) já usado no projeto. `cancellationReason` é um campo extra
+  // opcional dentro do próprio AlertDialog (primeiro uso deste componente
+  // que colhe um dado além de confirmar — ver Form/AlertDialog).
+  const [paymentToCancel, setPaymentToCancel] =
+    useState<IServiceOrderPayment | null>(null);
+  const [cancellationReason, setCancellationReason] = useState('');
+
+  const { mutate: cancelPaymentMutate, isPending: isCancelingPayment } =
+    useMutation({
+      mutationFn: async () => {
+        if (!order || !paymentToCancel) {
+          throw new Error('Nenhum pagamento selecionado.');
+        }
+
+        await api.post(
+          `/service-orders/${order.id}/payments/${paymentToCancel.id}/cancel`,
+          { cancellationReason: cancellationReason.trim() || undefined }
+        );
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: ['service-order-payments', order?.id],
+        });
+        toast.success(
+          paymentToCancel?.status === 'PAID'
+            ? 'Pagamento estornado.'
+            : 'Pagamento cancelado.'
+        );
+        setPaymentToCancel(null);
+        setCancellationReason('');
+      },
+      onError: () => {
+        toast.error('Não foi possível cancelar o pagamento.');
+      },
+    });
+  // END FUNCTIONS (pagamentos)
 
   return (
     <>
@@ -572,6 +752,120 @@ export function ServiceOrderDetailsModal({
                 </div>
               </form>
             </div>
+
+            <div>
+              <h3 className='text-[13px] font-bold'>Pagamentos</h3>
+
+              <div className='mt-2 flex items-center justify-between rounded-[9px] border border-border bg-surface-2 px-3 py-2 text-[13px]'>
+                <span className='text-text-muted'>Saldo devedor</span>
+                <span
+                  className={`font-mono font-bold ${
+                    remainingBalance > 0 ? 'text-warn' : 'text-good'
+                  }`}
+                >
+                  {formatCurrencyBRL(remainingBalance)}
+                </span>
+              </div>
+
+              {!payments || payments.length === 0 ? (
+                <p className='mt-2 text-[12.5px] text-text-muted'>
+                  Nenhum pagamento registrado ainda.
+                </p>
+              ) : (
+                <div className='mt-2 flex flex-col gap-1.5'>
+                  {payments.map((payment) => (
+                    <div
+                      key={payment.id}
+                      className='flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2 text-[12.5px]'
+                    >
+                      <div className='min-w-0'>
+                        <p className='font-semibold'>
+                          {formatCurrencyBRL(payment.amount)}{' '}
+                          <span className='font-normal text-text-muted'>
+                            · {PAYMENT_METHOD_LABEL[payment.payment_method]}
+                          </span>
+                        </p>
+                        <span
+                          className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${PAYMENT_STATUS_BADGE_CLASSNAME[payment.status]}`}
+                        >
+                          {PAYMENT_STATUS_LABEL[payment.status]}
+                        </span>
+                      </div>
+
+                      {canManagePayments && payment.status !== 'CANCELED' && (
+                        <div className='flex shrink-0 items-center gap-3'>
+                          {payment.status === 'PENDING' && (
+                            <button
+                              type='button'
+                              onClick={() => confirmPaymentMutate(payment)}
+                              disabled={
+                                isConfirmingPayment &&
+                                confirmingPayment?.id === payment.id
+                              }
+                              className='text-[11.5px] font-bold text-good transition-colors hover:underline disabled:cursor-not-allowed disabled:opacity-60'
+                            >
+                              Confirmar
+                            </button>
+                          )}
+                          <button
+                            type='button'
+                            onClick={() => setPaymentToCancel(payment)}
+                            className='text-[11.5px] font-bold text-crit transition-colors hover:underline'
+                          >
+                            {payment.status === 'PAID'
+                              ? 'Estornar'
+                              : 'Cancelar'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {canManagePayments &&
+                (order.status === 'CANCELED' ? (
+                  <p className='mt-3 text-[12px] text-text-muted'>
+                    OS cancelada — não é possível registrar novos pagamentos.
+                  </p>
+                ) : (
+                  <form
+                    onSubmit={handleRegisterPaymentSubmit(
+                      handleRegisterPayment
+                    )}
+                    noValidate
+                    className='mt-3 rounded-[9px] border border-border bg-surface-2 p-3'
+                  >
+                    <InputFormControl
+                      control={paymentControl}
+                      name='amount'
+                      label='Valor'
+                      type='number'
+                      placeholder='0,00'
+                    />
+
+                    <SelectPickerFormControl
+                      control={paymentControl}
+                      name='paymentMethod'
+                      label='Forma de pagamento'
+                      placeholder='Selecione'
+                      data={PAYMENT_METHOD_OPTIONS}
+                    />
+
+                    <div className='mt-4'>
+                      <Button
+                        type='submit'
+                        variant='ghost'
+                        disabled={isRegisteringPayment}
+                      >
+                        {isRegisteringPayment
+                          ? 'Registrando...'
+                          : 'Registrar pagamento'}
+                      </Button>
+                    </div>
+                  </form>
+                ))}
+            </div>
           </div>
         )}
       </Dialog>
@@ -601,6 +895,49 @@ export function ServiceOrderDetailsModal({
           }
         }}
       />
+
+      <AlertDialog
+        open={paymentToCancel !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPaymentToCancel(null);
+            setCancellationReason('');
+          }
+        }}
+        title={
+          paymentToCancel?.status === 'PAID'
+            ? 'Estornar pagamento?'
+            : 'Cancelar pagamento?'
+        }
+        description={
+          paymentToCancel
+            ? `${formatCurrencyBRL(paymentToCancel.amount)} via ${
+                PAYMENT_METHOD_LABEL[paymentToCancel.payment_method]
+              }${
+                paymentToCancel.status === 'PAID'
+                  ? ' — já estava confirmado como pago.'
+                  : '.'
+              }`
+            : ''
+        }
+        tone='destructive'
+        confirmLabel={
+          paymentToCancel?.status === 'PAID' ? 'Estornar' : 'Cancelar'
+        }
+        confirmLoadingLabel={
+          paymentToCancel?.status === 'PAID' ? 'Estornando...' : 'Cancelando...'
+        }
+        isLoading={isCancelingPayment}
+        onConfirm={() => cancelPaymentMutate()}
+      >
+        <Textarea
+          label='Motivo (opcional)'
+          value={cancellationReason}
+          onChange={(event) => setCancellationReason(event.target.value)}
+          rows={2}
+          placeholder='Só pra auditoria financeira'
+        />
+      </AlertDialog>
     </>
   );
 }

@@ -27,6 +27,14 @@ import { IUser, useAuth } from '@/hooks/auth';
 //                        (mais restrito que tudo acima, dá acesso ao
 //                        sistema inteiro; controla também se o item
 //                        "Equipe" aparece no Menubar)
+//  - canManagePayments:  POST /service-orders/:id/payments + .../confirm
+//                        + .../cancel — mesmo papel de
+//                        canCreateServiceOrder (ADMIN/RECEPTIONIST), mas
+//                        separado dele por ser uma ação de verdade
+//                        diferente (dinheiro, não dados da OS). Listar
+//                        pagamentos (GET) não tem restrição nenhuma — os
+//                        3 papéis veem o histórico, só a ação de
+//                        registrar/confirmar/cancelar é que soma.
 export interface IPermissions {
   canManageCustomers: boolean;
   canDeleteCustomer: boolean;
@@ -37,6 +45,7 @@ export interface IPermissions {
   canCancelServiceOrder: boolean;
   canSubmitUrgencyFeedback: boolean;
   canManageTeam: boolean;
+  canManagePayments: boolean;
 }
 
 function getPermissions(role: IUser['role'] | undefined): IPermissions {
@@ -54,6 +63,7 @@ function getPermissions(role: IUser['role'] | undefined): IPermissions {
     canCancelServiceOrder: isAdmin || isReceptionist,
     canSubmitUrgencyFeedback: isMechanic,
     canManageTeam: isAdmin,
+    canManagePayments: isAdmin || isReceptionist,
   };
 }
 

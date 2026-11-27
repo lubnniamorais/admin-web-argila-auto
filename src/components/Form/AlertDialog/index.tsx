@@ -1,4 +1,5 @@
 import * as RadixAlertDialog from '@radix-ui/react-alert-dialog';
+import { ReactNode } from 'react';
 import { tv } from 'tailwind-variants';
 
 // Reconstruído a partir do template antigo (ver CLAUDE.md, "Componentes
@@ -48,6 +49,14 @@ interface AlertDialogProps {
   // isPending de uma mutation, evitado clique duplo enquanto a chamada
   // à API ainda está em voo.
   isLoading?: boolean;
+  // Conteúdo extra entre a descrição e os botões — ex.: o campo de
+  // motivo (opcional) do cancelamento/estorno de pagamento, ver
+  // ServiceOrderDetailsModal. Primeiro uso deste componente que colhe um
+  // dado além de confirmar/cancelar — decisão confirmada com o usuário
+  // em vez de criar um modal de conteúdo livre (Dialog) só pra isso, já
+  // que o resto (título, descrição, botões) é idêntico a qualquer outro
+  // AlertDialog do projeto.
+  children?: ReactNode;
 }
 
 export function AlertDialog({
@@ -61,6 +70,7 @@ export function AlertDialog({
   tone = 'default',
   onConfirm,
   isLoading = false,
+  children,
 }: AlertDialogProps) {
   return (
     <RadixAlertDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -75,6 +85,11 @@ export function AlertDialog({
           <RadixAlertDialog.Description className='mt-2 text-[13px] leading-relaxed text-text-muted'>
             {description}
           </RadixAlertDialog.Description>
+
+          {/* Sem wrapper com margem própria — Textarea (único uso até
+              agora) já traz seu próprio `mt-4`, igual espaçaria em
+              qualquer outro formulário do projeto. */}
+          {children}
 
           <div className='mt-6 flex gap-3'>
             <RadixAlertDialog.Cancel
