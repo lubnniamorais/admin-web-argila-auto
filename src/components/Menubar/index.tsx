@@ -6,7 +6,6 @@ import {
   GearSix,
   type Icon,
   Package,
-  Receipt,
   Users,
   UsersThree,
 } from 'phosphor-react';
@@ -31,7 +30,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Operação',
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: Gauge },
-      { label: 'Orçamentos', href: '/orcamentos', icon: Receipt },
       {
         label: 'Ordens de Serviço',
         href: '/ordens-de-servico',

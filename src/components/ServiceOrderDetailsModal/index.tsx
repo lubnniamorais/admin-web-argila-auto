@@ -306,10 +306,31 @@ export function ServiceOrderDetailsModal({
         quantity: formData.quantity,
       });
 
-      return response.data.service_order as IServiceOrder;
+      return {
+        serviceOrder: response.data.service_order as IServiceOrder,
+        // Só presente quando a peça adicionada não tinha estoque
+        // suficiente numa OS já em IN_PROGRESS/AWAITING_PART — a API já
+        // moveu a OS pra AWAITING_PART sozinha em vez de bloquear (ver
+        // "Aguardando peça automático" no CLAUDE.md da API, 28/11/2026).
+        missingStockInfo: response.data.missing_stock_info as
+          | {
+              part_name: string;
+              part_sku: string;
+              missing_quantity: number;
+            }
+          | undefined,
+      };
     },
-    onSuccess: () => {
+    onSuccess: ({ missingStockInfo }) => {
       queryClient.invalidateQueries({ queryKey: ['service-orders'] });
+
+      if (missingStockInfo) {
+        toast.warning(
+          `Item adicionado, mas falta estoque — a OS foi pra "Aguardando peça": ${missingStockInfo.part_name} (faltam ${missingStockInfo.missing_quantity}).`
+        );
+        return;
+      }
+
       toast.success('Item adicionado.');
     },
     onError: (error) => {

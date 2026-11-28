@@ -18,6 +18,7 @@ import { SelectPickerFormControl } from '@/components/Form/SelectPickerFormContr
 import { TextareaFormControl } from '@/components/Form/TextareaFormControl';
 import { Dialog } from '@/components/Dialog';
 import { Pagination } from '@/components/Pagination';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { ServiceOrderDetailsModal } from '@/components/ServiceOrderDetailsModal';
 import { ICustomer, useCustomers } from '@/hooks/customers';
 import { IServiceOrder, useServiceOrders } from '@/hooks/serviceOrders';
@@ -26,6 +27,7 @@ import { api } from '@/lib/apiClient';
 import {
   formatDeliveryDate,
   getValidNextStatuses,
+  IMissingPart,
   IOrderStatus,
   isOrderOverdue,
   ORDER_STATUS_BADGE_CLASSNAME,
@@ -40,6 +42,32 @@ import { withSSRAuth } from '@/utils/withSSRAuth';
 
 const SEARCH_DEBOUNCE_MS = 400;
 const LIST_PER_PAGE = 10;
+
+// Filtro rápido de status — substitui a página `/orcamentos` (removida em
+// 28/11/2026, decisão confirmada com o usuário: eram a mesma entidade
+// `ServiceOrder`, só com `status` fixo diferente, e a existência das duas
+// telas separadas causava confusão de "por que isso tá duplicado"). Cada
+// grupo reúne os status que fazem sentido olhar juntos no dia a dia —
+// `ALL` (sem filtro) continua incluindo `CANCELED`, que não entra em
+// nenhum dos outros 3 grupos de propósito (não é "orçamento" nem "em
+// andamento" nem "concluído", é um desfecho à parte). `QUOTE` é
+// exatamente o `QUOTE_STATUSES` que a antiga `/orcamentos` usava.
+const STATUS_FILTER_OPTIONS = [
+  { value: 'ALL', label: 'Todos' },
+  { value: 'QUOTE', label: 'Orçamentos' },
+  { value: 'IN_PROGRESS', label: 'Em andamento' },
+  { value: 'COMPLETED', label: 'Concluídos' },
+] as const;
+
+type IStatusFilter = (typeof STATUS_FILTER_OPTIONS)[number]['value'];
+
+const STATUS_FILTER_GROUPS: Record<IStatusFilter, IOrderStatus[] | undefined> =
+  {
+    ALL: undefined,
+    QUOTE: ['PENDING_QUOTE', 'AWAITING_APPROVAL', 'REJECTED', 'APPROVED'],
+    IN_PROGRESS: ['IN_PROGRESS', 'AWAITING_PART', 'READY_FOR_PICKUP'],
+    COMPLETED: ['COMPLETED'],
+  };
 
 function formatCurrencyBRL(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
@@ -91,12 +119,36 @@ export default function OrdensDeServicoPage() {
           status,
         });
 
-        return response.data.service_order as IServiceOrder;
+        return {
+          serviceOrder: response.data.service_order as IServiceOrder,
+          // Só presente quando a transição pedida esbarrou em falta de
+          // estoque — a API já pôs a OS em AWAITING_PART sozinha em vez
+          // do status pedido (ver "Aguardando peça automático" no
+          // CLAUDE.md da API, 28/11/2026). Nunca mais dá 400 por isso.
+          missingParts: response.data.missing_parts as
+            | IMissingPart[]
+            | undefined,
+        };
       },
-      onSuccess: (_data, variables) => {
+      onSuccess: ({ serviceOrder, missingParts }) => {
         queryClient.invalidateQueries({ queryKey: ['service-orders'] });
+
+        if (missingParts && missingParts.length > 0) {
+          const partsList = missingParts
+            .map(
+              (part) => `${part.part_name} (faltam ${part.missing_quantity})`
+            )
+            .join(', ');
+          toast.warning(
+            `Falta estoque — a OS foi pra "Aguardando peça": ${partsList}.`
+          );
+          return;
+        }
+
+        // Sem peça faltando — a OS foi pro status pedido de verdade
+        // (ver mutationFn acima; `serviceOrder.status` já reflete isso).
         toast.success(
-          `OS movida para "${ORDER_STATUS_LABEL[variables.status]}".`
+          `OS movida para "${ORDER_STATUS_LABEL[serviceOrder.status]}".`
         );
       },
       onError: (error) => {
@@ -138,6 +190,7 @@ export default function OrdensDeServicoPage() {
     handleSubmit: handleCreateSubmit,
     reset: resetCreateForm,
     setValue: setCreateValue,
+    watch: watchCreateValue,
   } = useForm<ICreateServiceOrderFormData>({
     resolver: zodResolver(createServiceOrderSchema),
     defaultValues: {
@@ -213,6 +266,28 @@ export default function OrdensDeServicoPage() {
     }`,
     value: vehicle.id,
   }));
+
+  // Autopreenche a quilometragem atual com a do veículo escolhido — pedido
+  // do usuário (28/11/2026): antes o campo nascia sempre vazio, mesmo o
+  // veículo já tendo `current_mileage` cadastrado. Continua editável
+  // depois (só um valor inicial, não trava no que veio do cadastro) — o
+  // mecânico pode sobrescrever se o odômetro mudou desde o último
+  // registro.
+  const watchedVehicleId = watchCreateValue('vehicleId');
+
+  useEffect(() => {
+    if (!watchedVehicleId) {
+      return;
+    }
+
+    const vehicle = selectedCustomer?.vehicles.find(
+      (item) => item.id === watchedVehicleId
+    );
+
+    if (vehicle) {
+      setCreateValue('currentMileage', vehicle.current_mileage);
+    }
+  }, [watchedVehicleId]);
   // END FUNCTIONS (modal: nova OS)
 
   // FUNCTIONS (lista de OS)
@@ -220,12 +295,13 @@ export default function OrdensDeServicoPage() {
   // confirmada com o usuário: a Lista já cobria tudo que o board fazia,
   // com usabilidade melhor pra quem não pensa em "fluxo de colunas" no
   // dia a dia). Mesmo padrão de busca+paginação já usado em
-  // Clientes/Produtos. Não filtra por status — pra isso ver `/orcamentos`,
-  // que mostra só as OS em fase de orçamento (mesmo endpoint, filtro
-  // diferente).
+  // Clientes/Produtos. Filtro rápido de status (`statusFilter`) substitui
+  // a antiga página `/orcamentos` desde 28/11/2026 — ver
+  // `STATUS_FILTER_GROUPS` acima.
   const [listSearchInput, setListSearchInput] = useState('');
   const [listSearchParam, setListSearchParam] = useState('');
   const [listPage, setListPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<IStatusFilter>('ALL');
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -238,6 +314,7 @@ export default function OrdensDeServicoPage() {
 
   const { data: listData, isLoading: isLoadingList } = useServiceOrders({
     searchParam: listSearchParam,
+    status: STATUS_FILTER_GROUPS[statusFilter],
     page: listPage,
     perPage: LIST_PER_PAGE,
   });
@@ -256,11 +333,12 @@ export default function OrdensDeServicoPage() {
 
   // FUNCTIONS (modal: detalhes da OS)
   // O modal em si (edição, itens, urgência por IA) foi extraído em
-  // 04/11/2026 pra `ServiceOrderDetailsModal`, compartilhado com
-  // `/orcamentos` (ver comentário no próprio componente) — aqui só fica o
-  // que é específico desta tela: qual OS está selecionada, lida sempre de
-  // dentro de `listData` (não um snapshot do clique, mesmo racional já
-  // documentado no componente compartilhado).
+  // 04/11/2026 pra `ServiceOrderDetailsModal` (nasceu compartilhado com a
+  // antiga página `/orcamentos`, removida em 28/11/2026 — ver comentário
+  // em `STATUS_FILTER_GROUPS` acima; o componente continua existindo,
+  // agora usado só aqui) — aqui só fica o que é específico desta tela:
+  // qual OS está selecionada, lida sempre de dentro de `listData` (não um
+  // snapshot do clique, mesmo racional já documentado no componente).
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const selectedOrder = selectedOrderId
@@ -308,13 +386,26 @@ export default function OrdensDeServicoPage() {
           )}
         </div>
 
+        <div className='mt-3'>
+          <SegmentedControl
+            options={[...STATUS_FILTER_OPTIONS]}
+            value={statusFilter}
+            onChange={(value) => {
+              setStatusFilter(value);
+              setListPage(1);
+            }}
+          />
+        </div>
+
         {!listData || listData.serviceOrders.length === 0 ? (
           <p className='mt-5 py-6 text-center text-text-muted'>
             {isLoadingList
               ? 'Carregando...'
               : listSearchParam
                 ? 'Nenhuma OS encontrada pra essa busca.'
-                : 'Nenhuma OS ainda.'}
+                : statusFilter !== 'ALL'
+                  ? 'Nenhuma OS nesse filtro.'
+                  : 'Nenhuma OS ainda.'}
           </p>
         ) : (
           <>
